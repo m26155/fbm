@@ -12,6 +12,13 @@ public class MyNotificationListenerService extends NotificationListenerService {
     @Override
     public void onNotificationPosted(StatusBarNotification sbn) {
         String packageName = sbn.getPackageName();
+
+        // Filter notifications to only process Gmail and Line
+        if (!"com.google.android.gm".equals(packageName) && !"jp.naver.line.android".equals(packageName)) {
+            Log.d(TAG, "Notification Ignored: Package=" + packageName);
+            return;
+        }
+
         String title = sbn.getNotification().extras.getString("android.title");
         String text = sbn.getNotification().extras.getString("android.text");
 
@@ -24,6 +31,9 @@ public class MyNotificationListenerService extends NotificationListenerService {
 
     @Override
     public void onNotificationRemoved(StatusBarNotification sbn) {
-        Log.d(TAG, "Notification Removed: Package=" + sbn.getPackageName());
+        String packageName = sbn.getPackageName();
+        if ("com.google.android.gm".equals(packageName) || "jp.naver.line.android".equals(packageName)) {
+            Log.d(TAG, "Notification Removed: Package=" + packageName);
+        }
     }
 }
