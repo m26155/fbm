@@ -30,6 +30,7 @@ import com.example.fbm.databinding.ActivityMainBinding;
 
 import android.view.Menu;
 import android.view.MenuItem;
+import android.net.Uri;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -104,7 +105,9 @@ public class MainActivity extends AppCompatActivity {
         int id = item.getItemId();
 
         //noinspection SimplifiableIfStatement
-        if (id == R.id.action_settings) {
+        if (id == R.id.action_github) {
+            Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/m26155/fbm"));
+            startActivity(browserIntent);
             return true;
         }
 
