@@ -8,6 +8,6 @@
     <fragment
         android:id="@+id/FirstFragment"
         android:name="com.example.fbm.FirstFragment"
-        android:label="@string/first_fragment_label"
+        android:label="@string/welcome_label"
         tools:layout="@layout/fragment_first" />
 </navigation>
