@@ -13,7 +13,8 @@ public class MyNotificationListenerService extends NotificationListenerService {
 
     private static final String TAG = "MyNotificationListener";
     private static final String PREFS_NAME = "FBM_Prefs";
-    private static final String KEY_RPI_URL = "rpi_url";
+    private static final String KEY_RPI_IP = "rpi_ip";
+    private static final String KEY_RPI_PORT = "rpi_port";
 
     @Override
     public void onNotificationPosted(StatusBarNotification sbn) {
@@ -66,11 +67,14 @@ public class MyNotificationListenerService extends NotificationListenerService {
 
         // Send to RPi
         SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        String rpiUrl = prefs.getString(KEY_RPI_URL, "");
-        if (!rpiUrl.isEmpty()) {
+        String rpiIp = prefs.getString(KEY_RPI_IP, "");
+        String rpiPort = prefs.getString(KEY_RPI_PORT, "5000");
+
+        if (!rpiIp.isEmpty()) {
+            String rpiUrl = "http://" + rpiIp + ":" + rpiPort + "/notify";
             NetworkClient.sendNotification(rpiUrl, packageName, title, text, null);
         } else {
-            Log.d(TAG, "RPi URL not configured, skipping send");
+            Log.d(TAG, "RPi IP not configured, skipping send");
         }
 
         Intent intent = new Intent("com.example.fbm.NOTIFICATION_LISTENER_EXAMPLE");

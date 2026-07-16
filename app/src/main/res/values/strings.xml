@@ -4,7 +4,8 @@
     <string name="welcome_message">フィッシング詐欺撲滅隊メール支所へようこそ！SMSの通知を読み取り、AIでフィッシング詐欺かどうかを判定します。</string>
     <!-- Strings used for fragments for navigation -->
     <string name="welcome_label">Welcome</string>
-    <string name="rpi_url_hint">Raspberry Pi URL (e.g., http://192.168.1.10:5000/notify)</string>
+    <string name="rpi_ip_hint">Raspberry Pi IP Address (e.g., 192.168.1.10)</string>
+    <string name="rpi_port_hint">Port (e.g., 5000)</string>
     <string name="button_save">Save Configuration</string>
     <string name="config_saved">Configuration saved</string>
 

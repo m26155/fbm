@@ -17,7 +17,8 @@ public class FirstFragment extends Fragment {
 
     private FragmentFirstBinding binding;
     private static final String PREFS_NAME = "FBM_Prefs";
-    private static final String KEY_RPI_URL = "rpi_url";
+    private static final String KEY_RPI_IP = "rpi_ip";
+    private static final String KEY_RPI_PORT = "rpi_port";
 
     @Override
     public View onCreateView(
@@ -34,12 +35,18 @@ public class FirstFragment extends Fragment {
         super.onViewCreated(view, savedInstanceState);
 
         SharedPreferences prefs = requireContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        String savedUrl = prefs.getString(KEY_RPI_URL, "");
-        binding.edittextRpiUrl.setText(savedUrl);
+        String savedIp = prefs.getString(KEY_RPI_IP, "");
+        String savedPort = prefs.getString(KEY_RPI_PORT, "5000");
+        binding.edittextRpiIp.setText(savedIp);
+        binding.edittextRpiPort.setText(savedPort);
 
         binding.buttonSaveConfig.setOnClickListener(v -> {
-            String url = binding.edittextRpiUrl.getText().toString();
-            prefs.edit().putString(KEY_RPI_URL, url).apply();
+            String ip = binding.edittextRpiIp.getText().toString();
+            String port = binding.edittextRpiPort.getText().toString();
+            prefs.edit()
+                    .putString(KEY_RPI_IP, ip)
+                    .putString(KEY_RPI_PORT, port)
+                    .apply();
             Toast.makeText(requireContext(), R.string.config_saved, Toast.LENGTH_SHORT).show();
         });
     }
