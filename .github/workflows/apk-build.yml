@@ -47,12 +47,18 @@ jobs:
             ~/.gradle/wrapper
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/gradle/wrapper/gradle-wrapper.properties') }}
 
+ - name: Set ANDROID_SDK_ROOT and persist PATH
+        run: |
+          echo "ANDROID_SDK_ROOT=$RUNNER_TEMP/android-sdk" >> $GITHUB_ENV
+          echo "ANDROID_HOME=$RUNNER_TEMP/android-sdk" >> $GITHUB_ENV
+          # Add expected SDK tool locations to PATH so subsequent steps can find sdkmanager/adb
+          echo "PATH=$RUNNER_TEMP/android-sdk/cmdline-tools/latest/bin:$RUNNER_TEMP/android-sdk/platform-tools:$PATH" >> $GITHUB_ENV
+
       - name: Install Android commandline-tools & SDK components
         run: |
           set -e
           mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
           cd "$ANDROID_SDK_ROOT"
-          # commandlinetools URL: update if Google changes the filename/version
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdline.zip
           unzip -q cmdline.zip -d cmdline-tools-temp
           mkdir -p cmdline-tools/latest
@@ -60,17 +66,14 @@ jobs:
           export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH"
           yes | sdkmanager --sdk_root="$ANDROID_SDK_ROOT" --licenses || true
           sdkmanager --sdk_root="$ANDROID_SDK_ROOT" "platform-tools" "platforms;android-${{ github.event.inputs.apiLevel }}" "build-tools;${{ github.event.inputs.buildTools }}"
-        shell: bash
-
-      - name: Make gradlew executable
-        run: chmod +x ./gradlew
 
       - name: Build APK
         run: |
           set -e
-          # Gradle task name: assembleDebug or assembleRelease (depends on input)
-          ./gradlew assemble${{ github.event.inputs.buildType }} --no-daemon -Pandroid.sdkRoot="$ANDROID_SDK_ROOT"
+          ./gradlew assemble${{ github.event.inputs.buildType }} --no-daemon -Pandroid.sdkRoot="$ANDROID_SDK_ROOT" --stacktrace --info
         env:
+          ANDROID_SDK_ROOT: ${{ env.ANDROID_SDK_ROOT }}
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
           JAVA_HOME: ${{ env.JAVA_HOME }}
 
       - name: Upload APK artifacts
