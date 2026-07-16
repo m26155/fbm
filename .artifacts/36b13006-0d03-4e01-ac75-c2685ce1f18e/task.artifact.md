@@ -1,0 +1,5 @@
+- [x] Update `strings.xml` with new hints for IP and Port
+- [x] Update `fragment_first.xml` to include IP and Port input fields
+- [x] Update `FirstFragment.java` to handle IP and Port persistence
+- [x] Update `MyNotificationListenerService.java` to construct the URL from IP and Port
+- [x] Verify the build and functionality
