@@ -1,0 +1,79 @@
+# Manual build APK workflow
+# - Run manually from Actions → Manual build APK → Run workflow
+# - Inputs: buildType (Debug/Release), apiLevel, buildTools, signing true/false
+on:
+  workflow_dispatch:
+    inputs:
+      buildType:
+        description: 'Build variant name: Debug or Release'
+        required: true
+        default: 'Debug'
+      apiLevel:
+        description: 'Android API level (platforms;android-<apiLevel>)'
+        required: true
+        default: '33'
+      buildTools:
+        description: 'Build-tools version'
+        required: true
+        default: '33.0.2'
+      signing:
+        description: 'Enable release signing (requires secrets). true/false'
+        required: true
+        default: 'false'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      ANDROID_SDK_ROOT: ${{ runner.temp }}/android-sdk
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '11'
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/gradle/wrapper/gradle-wrapper.properties') }}
+
+      - name: Install Android commandline-tools & SDK components
+        run: |
+          set -e
+          mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
+          cd "$ANDROID_SDK_ROOT"
+          # commandlinetools URL: update if Google changes the filename/version
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-9477386_latest.zip -O cmdline.zip
+          unzip -q cmdline.zip -d cmdline-tools-temp
+          mkdir -p cmdline-tools/latest
+          mv cmdline-tools-temp/cmdline-tools/* cmdline-tools/latest/
+          export PATH="$ANDROID_SDK_ROOT/cmdline-tools/latest/bin:$PATH"
+          yes | sdkmanager --sdk_root="$ANDROID_SDK_ROOT" --licenses
+          sdkmanager --sdk_root="$ANDROID_SDK_ROOT" "platform-tools" "platforms;android-${{ github.event.inputs.apiLevel }}" "build-tools;${{ github.event.inputs.buildTools }}"
+        shell: bash
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Build APK
+        run: |
+          set -e
+          # Gradle task name: assembleDebug or assembleRelease (depends on input)
+          ./gradlew assemble${{ github.event.inputs.buildType }} --no-daemon -Pandroid.sdkRoot="$ANDROID_SDK_ROOT"
+        env:
+          JAVA_HOME: ${{ env.JAVA_HOME }}
+
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-artifacts
+          path: |
+            app/build/outputs/**/*.apk
+            **/build/outputs/**/*.apk
