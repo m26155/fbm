@@ -1,7 +1,9 @@
 package com.example.fbm;
 
 import android.app.Notification;
+import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
@@ -10,6 +12,8 @@ import android.util.Log;
 public class MyNotificationListenerService extends NotificationListenerService {
 
     private static final String TAG = "MyNotificationListener";
+    private static final String PREFS_NAME = "FBM_Prefs";
+    private static final String KEY_RPI_URL = "rpi_url";
 
     @Override
     public void onNotificationPosted(StatusBarNotification sbn) {
@@ -59,6 +63,15 @@ public class MyNotificationListenerService extends NotificationListenerService {
         }
 
         Log.d(TAG, "Notification Posted: Package=" + packageName + ", Title=" + title + ", Text=" + text);
+
+        // Send to RPi
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        String rpiUrl = prefs.getString(KEY_RPI_URL, "");
+        if (!rpiUrl.isEmpty()) {
+            NetworkClient.sendNotification(rpiUrl, packageName, title, text, null);
+        } else {
+            Log.d(TAG, "RPi URL not configured, skipping send");
+        }
 
         Intent intent = new Intent("com.example.fbm.NOTIFICATION_LISTENER_EXAMPLE");
         intent.putExtra("notification_event", "Posted: " + packageName + "\n" + title + ": " + text);
