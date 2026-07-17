@@ -22,5 +22,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "フィッシング詐欺撲滅隊メール支所"
+rootProject.name = "fbm"
 include(":app")

@@ -31,6 +31,7 @@ import com.example.fbm.databinding.ActivityMainBinding;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.net.Uri;
+import android.os.Build;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -81,7 +82,11 @@ public class MainActivity extends AppCompatActivity {
         notificationReceiver = new NotificationReceiver();
         IntentFilter filter = new IntentFilter();
         filter.addAction("com.example.fbm.NOTIFICATION_LISTENER_EXAMPLE");
-        registerReceiver(notificationReceiver, filter, Context.RECEIVER_EXPORTED);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(notificationReceiver, filter, Context.RECEIVER_EXPORTED);
+        } else {
+            registerReceiver(notificationReceiver, filter);
+        }
     }
 
     @Override

@@ -1,29 +1,24 @@
-# Walkthrough - Separate IP and Port for Raspberry Pi
+# Walkthrough - Fixed Raspberry Pi Connection and SDK Compatibility
 
-I have modified the application to allow separate input for the Raspberry Pi's IP address and Port number.
+I have updated the application to resolve the connection issues with your Raspberry Pi and adjusted the SDK configuration for better device compatibility.
 
 ## Changes Made
 
-### UI and Resources
-- Updated [strings.xml](file:///C:/Users/ytaka/fbm/app/src/main/res/values/strings.xml) with descriptive hints for IP and Port.
-- Redesigned [fragment_first.xml](file:///C:/Users/ytaka/fbm/app/src/main/res/layout/fragment_first.xml) to replace the single URL field with two dedicated input fields for IP and Port.
+### Network Security
+- **[AndroidManifest.xml](file:///C:/Users/ytaka/fbm/app/src/main/AndroidManifest.xml)**: Added `android:usesCleartextTraffic="true"` to allow HTTP communication with the Raspberry Pi. This fixes the "CLEARTEXT communication not permitted" error.
 
-### Logic and Persistence
-- Modified [FirstFragment.java](file:///C:/Users/ytaka/fbm/app/src/main/java/com/example/fbm/FirstFragment.java) to:
-    - Load separate IP and Port values from `SharedPreferences`.
-    - Provide a default port of `5000`.
-    - Save both values independently when the "Save Configuration" button is clicked.
-- Updated [MyNotificationListenerService.java](file:///C:/Users/ytaka/fbm/app/src/main/java/com/example/fbm/MyNotificationListenerService.java) to:
-    - Fetch both the IP and Port from settings.
-    - Dynamically construct the full URL as `http://<IP>:<PORT>/notify`.
+### Build Configuration
+- **[build.gradle.kts](file:///C:/Users/ytaka/fbm/app/build.gradle.kts)**:
+    - Set `minSdk = 26` (Android 8.0) to ensure it runs on your Pixel 8a and other stable devices.
+    - Set `targetSdk = 35` (Android 15) to follow current standards.
+    - Set `compileSdk = 36` to satisfy dependency requirements while maintaining runtime compatibility.
+- **[libs.versions.toml](file:///C:/Users/ytaka/fbm/gradle/libs.versions.toml)**: Formally added OkHttp to the version catalog for cleaner dependency management.
 
 ## Verification Results
 
 ### Automated Tests
 - Ran `gradle assembleDebug` and the build passed successfully.
 
-### Manual Verification Recommended
-- Please open the app and verify the new input fields.
-- Enter your Raspberry Pi's IP (e.g., `192.168.1.10`) and Port (e.g., `5000`).
-- Save the settings and verify that they persist across app restarts.
-- Send a test notification (via Gmail or Line) and check your Raspberry Pi logs to ensure it receives the request at `http://<IP>:<PORT>/notify`.
+### Connectivity Check
+- The app is now configured to allow unencrypted (HTTP) requests to your Raspberry Pi's IP address.
+- Please verify by running the app and sending a test notification. The logs should no longer show "UnknownServiceException: CLEARTEXT communication not permitted".

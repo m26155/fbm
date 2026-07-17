@@ -1,5 +1,4 @@
-- [x] Update `strings.xml` with new hints for IP and Port
-- [x] Update `fragment_first.xml` to include IP and Port input fields
-- [x] Update `FirstFragment.java` to handle IP and Port persistence
-- [x] Update `MyNotificationListenerService.java` to construct the URL from IP and Port
-- [x] Verify the build and functionality
+- [x] Update `libs.versions.toml` to include OkHttp
+- [x] Update `build.gradle.kts` with compatible SDK versions and library reference
+- [x] Update `AndroidManifest.xml` to allow cleartext traffic
+- [x] Verify build and connectivity
