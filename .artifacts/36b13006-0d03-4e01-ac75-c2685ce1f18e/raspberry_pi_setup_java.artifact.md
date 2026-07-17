@@ -1,35 +1,16 @@
 # Raspberry Pi サーバー設定ガイド (AI判定 + LED通知版)
 
-このガイドでは、Javaを使用して通知を受け取り、AI（Ollama）で詐欺判定を行い、**詐欺と判定された場合に物理LEDを光らせる**手順を説明します。
+このガイドでは、通知を受信し、AI（Ollama）で解析を行い、結果を画面表示するとともに、詐欺の場合にLEDを光らせる**堅牢なプログラム**の構築手順を説明します。
 
 ## 1. 準備するもの
 
 - Raspberry Pi (Java JDKインストール済み)
-- Ollama (yutayuma-ai モデルが準備済みであること)
-- **LED** (1個)
-- **抵抗** (220Ω〜330Ω程度、1個)
-- ジャンパー線
+- Ollama (yutayuma-ai モデル準備済み)
+- LED + 抵抗 (GPIO 18に接続)
 
-## 2. ハードウェアの接続
+## 2. プログラムの作成 (NotificationServer.java)
 
-ラズパイの電源を切った状態で、以下のように接続してください。
-
-- **LEDのアノード（長い方の足）**: 抵抗を介して **GPIO 18** (物理ピン 12番) に接続
-- **LEDのカソード（短い方の足）**: **GND** (物理ピン 6番など) に接続
-
-## 3. Ollamaの準備
-
-```bash
-# Ollamaのインストール
-curl -fsSL https://ollama.com/install.sh | sh
-
-# モデルの確認
-ollama list
-```
-
-## 4. プログラムの作成 (NotificationServer.java)
-
-以下のコードは、AIの回答の中に「詐欺」「フィッシング」「scam」「phishing」などの言葉が含まれているかチェックし、含まれている場合にLEDを5秒間点灯させます。
+この最新版では、データの受信漏れを防ぎ、AIの回答を確実に画面に表示するための改善が含まれています。
 
 ```java
 import com.sun.net.httpserver.HttpExchange;
@@ -47,19 +28,18 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class NotificationServer {
-    private static final int LED_PIN = 18; // BCM番号
+    private static final int LED_PIN = 18;
 
     public static void main(String[] args) throws IOException {
         int port = 5000;
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
         server.createContext("/notify", new NotificationHandler());
-        server.setExecutor(null);
+        server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool()); // 並列処理を有効化
 
-        // 初期状態としてLEDをオフに設定
         runCommand("pinctrl", String.valueOf(LED_PIN), "op", "dl");
 
         System.out.println("Java Server started on port " + port);
-        System.out.println("LED Alert System ready (GPIO " + LED_PIN + ")");
+        System.out.println("Waiting for notifications...");
         server.start();
     }
 
@@ -73,23 +53,29 @@ public class NotificationServer {
                     body = scanner.hasNext() ? scanner.useDelimiter("\\A").next() : "";
                 }
 
+                // 1. 受信した生のデータを確認（デバッグ用）
+                System.out.println("\n[Raw JSON Received]: " + body);
+
                 String title = extractValue(body, "title");
                 String message = extractValue(body, "text");
 
-                System.out.println("\n--- 通知受信 ---");
-                System.out.println("Title: " + title);
-                System.out.println("Text: " + message);
+                System.out.println("Parsed Title: " + title);
+                System.out.println("Parsed Text: " + message);
 
-                if (!message.equals("Unknown")) {
-                    String aiResponse = runOllama(message);
-                    checkAndAlert(aiResponse);
-                }
-
+                // レスポンスを先に返してスマホ側の接続を完了させる
                 String response = "{\"status\":\"success\"}";
                 exchange.getResponseHeaders().set("Content-Type", "application/json");
                 exchange.sendResponseHeaders(200, response.length());
                 try (OutputStream os = exchange.getResponseBody()) {
                     os.write(response.getBytes());
+                }
+
+                // 2. AI処理を非同期（バックグラウンド）で開始
+                if (!message.equals("Unknown") && !message.isEmpty()) {
+                    new Thread(() -> {
+                        String aiResponse = runOllama(message);
+                        checkAndAlert(aiResponse);
+                    }).start();
                 }
             } else {
                 exchange.sendResponseHeaders(405, -1);
@@ -97,16 +83,23 @@ public class NotificationServer {
         }
 
         private String extractValue(String json, String key) {
-            Pattern pattern = Pattern.compile("\"" + key + "\":\\s*\"([^\"]*)\"");
+            // エスケープされた文字を考慮した正規表現
+            Pattern pattern = Pattern.compile("\"" + key + "\":\\s*\"((?:\\\\\"|[^\"])*)\"");
             Matcher matcher = pattern.matcher(json);
-            return matcher.find() ? matcher.group(1) : "Unknown";
+            if (matcher.find()) {
+                String val = matcher.group(1);
+                // 簡易的なエスケープ解除
+                return val.replace("\\\"", "\"").replace("\\n", "\n");
+            }
+            return "Unknown";
         }
 
         private String runOllama(String text) {
-            System.out.println("\n[AI 解析中...]");
+            System.out.println("\n[Ollama AI 処理開始]");
             StringBuilder response = new StringBuilder();
+            // 引数としてテキストを渡す（非対話モード）
             ProcessBuilder pb = new ProcessBuilder("ollama", "run", "yutayuma-ai", text);
-            pb.redirectErrorStream(true);
+            pb.redirectErrorStream(true); // エラー出力も標準出力に統合
 
             try {
                 Process process = pb.start();
@@ -114,43 +107,43 @@ public class NotificationServer {
                     String line;
                     System.out.println("--- AIの回答 ---");
                     while ((line = reader.readLine()) != null) {
-                        System.out.println(line);
-                        response.append(line).append(" ");
+                        // ANSIエスケープコード（装飾やプログレスバー）を除去
+                        String cleanLine = line.replaceAll("\\x1B\\[[0-9;]*[a-zA-Z]", "");
+                        if (!cleanLine.trim().isEmpty()) {
+                            System.out.println(cleanLine);
+                            response.append(cleanLine).append(" ");
+                        }
                     }
                     System.out.println("----------------");
                 }
-                process.waitFor();
+                int exitCode = process.waitFor();
+                if (exitCode != 0) System.err.println("Ollama実行エラー。終了コード: " + exitCode);
             } catch (Exception e) {
-                System.err.println("Ollama実行エラー: " + e.getMessage());
+                System.err.println("実行失敗: " + e.getMessage());
             }
             return response.toString();
         }
 
         private void checkAndAlert(String aiResponse) {
             String lowerResponse = aiResponse.toLowerCase();
-            // 詐欺を疑うキーワードが含まれているかチェック
             if (lowerResponse.contains("詐欺") || lowerResponse.contains("フィッシング") ||
                 lowerResponse.contains("scam") || lowerResponse.contains("phishing")) {
 
-                System.out.println("⚠️ 詐欺を検出！LEDを点灯します。");
+                System.out.println("⚠️ 詐欺検出: LED点灯中...");
                 triggerLed();
             } else {
-                System.out.println("✅ 安全なメッセージと判断されました。");
+                System.out.println("✅ 安全判定");
             }
         }
 
         private void triggerLed() {
-            new Thread(() -> {
-                try {
-                    // LEDオン (Drive High)
-                    runCommand("pinctrl", String.valueOf(LED_PIN), "op", "dh");
-                    Thread.sleep(5000); // 5秒間点灯
-                    // LEDオフ (Drive Low)
-                    runCommand("pinctrl", String.valueOf(LED_PIN), "op", "dl");
-                } catch (Exception e) {
-                    System.err.println("LED制御エラー: " + e.getMessage());
-                }
-            }).start();
+            try {
+                runCommand("pinctrl", String.valueOf(LED_PIN), "op", "dh");
+                Thread.sleep(5000);
+                runCommand("pinctrl", String.valueOf(LED_PIN), "op", "dl");
+            } catch (Exception e) {
+                System.err.println("LED制御エラー: " + e.getMessage());
+            }
         }
     }
 
@@ -158,23 +151,19 @@ public class NotificationServer {
         try {
             new ProcessBuilder(args).start().waitFor();
         } catch (Exception e) {
-            System.err.println("コマンド実行エラー: " + e.getMessage());
+            System.err.println("コマンドエラー: " + e.getMessage());
         }
     }
 }
 ```
 
-## 5. 実行手順
+## 3. トラブルシューティング
 
-1. ラズパイ上で `NotificationServer.java` をコンパイルします。
-   ```bash
-   javac NotificationServer.java
-   ```
-2. サーバーを起動します。
-   ```bash
-   java NotificationServer
-   ```
+もしAIの回答が表示されない場合は、以下の点を確認してください。
 
-## 6. 動作確認
-
-Androidアプリから詐欺を模したメッセージを送信し、AIが詐欺と判断した場合に**物理的なLEDが5秒間光る**ことを確認してください。
+1.  **手動実行テスト**:
+    ラズパイのターミナルで `ollama run yutayuma-ai "テストメッセージ"` を直接入力し、回答が返ってくるか確認してください。
+2.  **実行権限**:
+    `pinctrl` などのコマンドが権限エラーになる場合は、`sudo java NotificationServer` で実行してください。
+3.  **モデル名**:
+    コード内の `"yutayuma-ai"` が、実際に作成したモデル名と完全に一致しているか確認してください。

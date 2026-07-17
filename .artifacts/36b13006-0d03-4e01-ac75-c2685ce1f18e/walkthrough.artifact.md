@@ -1,27 +1,21 @@
-# Walkthrough - Scam Detection LED Alert Integration
+# Walkthrough - AI Response Visibility Fix
 
-I have updated the Raspberry Pi guide to include physical LED notification when the AI detects a potential scam.
+I have improved the Raspberry Pi Java server to ensure AI responses are correctly captured and displayed in the terminal.
 
-## Changes Made
+## Key Improvements
 
-### Documentation and Guide
-- **[raspberry_pi_setup_java.artifact.md](file:///C:/Users/ytaka/fbm/.artifacts/36b13006-0d03-4e01-ac75-c2685ce1f18e/raspberry_pi_setup_java.artifact.md)**:
-    - Added **Hardware Setup** instructions for connecting an LED and resistor to GPIO 18.
-    - Updated the **Java Code** to:
-        - Integrate Ollama AI for analyzing received notification text.
-        - Keyword scanning: Checks AI response for terms like "詐欺", "フィッシング", "Scam", or "Phishing".
-        - **GPIO Control**: Uses the `pinctrl` command to physically light up an LED for 5 seconds when a scam is detected.
-        - Non-blocking execution: LED control runs in a separate thread so it doesn't slow down the main server loop.
+### Robust Output Capture
+- **ANSI Stripping**: Added logic to remove terminal formatting codes (like `\x1B[m`) that Ollama sometimes emits. These codes can hide text in some terminal environments or make it look like garbage.
+- **Error Stream Merging**: Merged the error output of the Ollama process into the standard output. This ensures that if the AI fails to start or encounters an issue, the error message is visible in your Java console.
 
-## How to Test
+### Enhanced Debugging
+- **Raw JSON Logging**: The server now prints `[Raw JSON Received]` as soon as data arrives from the Android app. This helps confirm that the connection itself is working.
+- **Detailed Parsing**: Prints the "Parsed Title" and "Parsed Text" to verify that the message content is being correctly extracted before being sent to the AI.
 
-1. **Hardware**: Connect your LED and resistor to GPIO 18 and GND as described in the guide.
-2. **Server**: Update, compile, and run `NotificationServer.java` on your Raspberry Pi.
-3. **Android App**: Ensure the app is pointing to your Raspberry Pi's IP.
-4. **Trigger**: Send a notification containing a suspicious message (e.g., "Account locked, click here: http://scam-site.com").
-5. **Verify**: Check if the LED lights up on your Raspberry Pi!
+### Performance & Stability
+- **Asynchronous Execution**: The AI analysis now runs in a separate thread. This means the Android app receives a "success" signal immediately, preventing timeouts on the phone while the AI is thinking on the Raspberry Pi.
+- **Improved Regex**: Updated the JSON extraction to handle special characters and escaped quotes more reliably.
 
-## Verification Results
-- The Java logic correctly extracts JSON data and triggers the `ollama` command.
-- The keyword matching system is case-insensitive and covers both Japanese and English terms.
-- The use of `pinctrl` ensures compatibility with modern Raspberry Pi OS versions without requiring root (if the user is in the `gpio` group).
+## Verification
+- To verify the fix, please update and re-compile `NotificationServer.java` on your Raspberry Pi.
+- When you send a notification, you should see the raw data, followed by `[Ollama AI 処理開始]`, and then the step-by-step output from the AI.
