@@ -1,32 +1,40 @@
-# Implementation Plan - Integrate Ollama AI on Raspberry Pi (Java)
+# Implementation Plan - Fix Raspberry Pi Connection and SDK Compatibility
 
-Update the Raspberry Pi Java server guide to automatically trigger a local AI model (Ollama) when a notification is received.
+Address the connection failure to Raspberry Pi (Cleartext error) and adjust SDK versions for better device compatibility.
 
 ## User Review Required
 
 > [!IMPORTANT]
-> This update assumes **Ollama** is installed and the model `yutayuma-ai` is already pulled/created on your Raspberry Pi.
-> The Java code will execute shell commands directly. Ensure that the Raspberry Pi has sufficient resources (RAM/CPU) to run the AI model.
+> I am lowering the `minSdk` to 26 and `compileSdk`/`targetSdk` to 35.
+> API 36 is a future/preview version, and `minSdk = 36` prevents the app from running on any current stable Android device.
+
+> [!NOTE]
+> I am enabling cleartext traffic (HTTP) in the manifest so the app can talk to your Raspberry Pi without SSL errors.
 
 ## Proposed Changes
 
-### [Documentation Artifact]
+### [Dependencies]
 
-#### [MODIFY] [raspberry_pi_setup_java.artifact.md](file:///C:/Users/ytaka/fbm/.artifacts/36b13006-0d03-4e01-ac75-c2685ce1f18e/raspberry_pi_setup_java.artifact.md)
-- Add a new section for **Ollama Installation**.
-- Update the **Java Program** code to:
-    - Parse the incoming JSON to extract the notification message.
-    - Use `ProcessBuilder` to execute `ollama run yutayuma-ai "<message>"`.
-    - Print the AI's response to the console.
-- Update the **Execution** steps if necessary.
+#### [MODIFY] [libs.versions.toml](file:///C:/Users/ytaka/fbm/gradle/libs.versions.toml)
+- Add `okhttp` version and library definition.
+
+### [Build Configuration]
+
+#### [MODIFY] [build.gradle.kts](file:///C:/Users/ytaka/fbm/app/build.gradle.kts)
+- Set `compileSdk` to `35`.
+- Change `minSdk` to `26`.
+- Change `targetSdk` to `35`.
+- Use `libs.okhttp` from the version catalog.
+
+### [Manifest]
+
+#### [MODIFY] [AndroidManifest.xml](file:///C:/Users/ytaka/fbm/app/src/main/AndroidManifest.xml)
+- Add `android:usesCleartextTraffic="true"` to the `<application>` tag.
 
 ## Verification Plan
 
+### Automated Tests
+- Run `gradle assembleDebug` to ensure it builds.
+
 ### Manual Verification
-1.  **Server side (Raspberry Pi):**
-    - Compile the updated `NotificationServer.java`.
-    - Run the server.
-    - Manually send a mock POST request to `http://localhost:5000/notify` with a JSON body and verify that Ollama is triggered.
-2.  **End-to-End:**
-    - Trigger a notification on the Android phone.
-    - Verify that the Raspberry Pi console shows the notification and then the generated AI response from Ollama.
+- Verify that notifications are sent to the Raspberry Pi without "CLEARTEXT communication not permitted" errors in logcat.

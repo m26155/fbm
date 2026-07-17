@@ -1,78 +1,69 @@
-# Raspberry Pi サーバー設定ガイド (Java + Ollama AI版)
+# Raspberry Pi サーバー設定ガイド (Java版)
 
-このガイドでは、Javaを使用して通知を受け取り、受信したメッセージをラズパイ上のAI（Ollama）に渡して自動解析させる手順を説明します。
+このガイドでは、Javaを使用して、Androidアプリからの通知を受け取るためのサーバーをRaspberry Pi上に構築する手順を説明します。
 
 ## 1. 準備するもの
 
 - Raspberry Pi (Java JDKがインストール済みであること)
-- Ollama (AI実行環境)
 - インターネット接続環境
 
-## 2. Ollamaのインストールとモデルの準備
+## 2. Javaの確認
 
-ラズパイのターミナルで以下のコマンドを実行して、Ollamaとモデルを準備します。
+ラズパイのターミナルで以下のコマンドを実行し、Javaがインストールされているか確認してください。
 
 ```bash
-# Ollamaのインストール
-curl -fsSL https://ollama.com/install.sh | sh
-
-# モデル「yutayuma-ai」の準備（すでに作成済みの前提）
-# 作成していない場合は、ベースとなるモデルをプルしてください
-ollama pull llama3 # 例
+java -version
 ```
+インストールされていない場合は、`sudo apt update && sudo apt install default-jdk` でインストールできます。
 
-## 3. 受信 + AI実行プログラムの作成
+## 3. 受信用プログラムの作成
 
-任意のディレクトリに `NotificationServer.java` という名前でファイルを作成し、以下のコードを保存してください。
+任意のディレクトリに `NotificationServer.java` という名前でファイルを作成し、以下のコードを貼り付けて保存してください。
 
 ```java
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
-import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.Scanner;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class NotificationServer {
     public static void main(String[] args) throws IOException {
+        // Androidアプリの設定と合わせるポート番号（デフォルト: 5000）
         int port = 5000;
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
+
+        // /notify エンドポイントを作成
         server.createContext("/notify", new NotificationHandler());
-        server.setExecutor(null);
+        server.setExecutor(null); // デフォルトのエグゼキュータを使用
+
         System.out.println("Java Server started on port " + port);
-        System.out.println("Waiting for notifications to process with Ollama...");
+        System.out.println("Waiting for notifications...");
         server.start();
     }
 
     static class NotificationHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
+            // POSTメソッドのみ許可
             if ("POST".equals(exchange.getRequestMethod())) {
+                // リクエストボディ（JSON）の読み取り
                 InputStream is = exchange.getRequestBody();
                 String body;
                 try (Scanner scanner = new Scanner(is, StandardCharsets.UTF_8.name())) {
-                    body = scanner.hasNext() ? scanner.useDelimiter("\\A").next() : "";
+                    body = scanner.useDelimiter("\\A").next();
                 }
 
-                // JSONから "text" フィールドの値を簡易的に抽出
-                String message = extractValue(body, "text");
-                String title = extractValue(body, "title");
-
+                // 受信内容の表示
                 System.out.println("\n--- 通知を受信しました ---");
-                System.out.println("Title: " + title);
-                System.out.println("Text: " + message);
+                System.out.println(body);
+                System.out.println("--------------------------");
 
-                if (!message.equals("Unknown")) {
-                    runOllama(message);
-                }
-
+                // レスポンスの送信
                 String response = "{\"status\":\"success\"}";
                 exchange.getResponseHeaders().set("Content-Type", "application/json");
                 exchange.sendResponseHeaders(200, response.length());
@@ -80,39 +71,8 @@ public class NotificationServer {
                     os.write(response.getBytes());
                 }
             } else {
+                // POST以外は 405 Method Not Allowed
                 exchange.sendResponseHeaders(405, -1);
-            }
-        }
-
-        // 簡易的なJSON値抽出メソッド
-        private String extractValue(String json, String key) {
-            Pattern pattern = Pattern.compile("\"" + key + "\":\\s*\"([^\"]*)\"");
-            Matcher matcher = pattern.matcher(json);
-            if (matcher.find()) {
-                return matcher.group(1);
-            }
-            return "Unknown";
-        }
-
-        // Ollamaを実行して結果を表示するメソッド
-        private void runOllama(String text) {
-            System.out.println("\n[Ollama AI 処理中...]");
-            ProcessBuilder pb = new ProcessBuilder("ollama", "run", "yutayuma-ai", text);
-            pb.redirectErrorStream(true);
-
-            try {
-                Process process = pb.start();
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                    String line;
-                    System.out.println("--- AIの回答 ---");
-                    while ((line = reader.readLine()) != null) {
-                        System.out.println(line);
-                    }
-                    System.out.println("----------------");
-                }
-                process.waitFor();
-            } catch (Exception e) {
-                System.err.println("Ollamaの実行に失敗しました: " + e.getMessage());
             }
         }
     }
@@ -121,7 +81,7 @@ public class NotificationServer {
 
 ## 4. コンパイルと実行
 
-ラズパイのターミナルで実行します。
+ラズパイのターミナルで以下の手順を実行します。
 
 ### コンパイル
 ```bash
@@ -133,13 +93,16 @@ javac NotificationServer.java
 java NotificationServer
 ```
 
-## 5. 動作確認
+起動すると `Java Server started on port 5000` と表示されます。
 
-1. Androidアプリ側で、ラズパイのIPアドレスとポート `5000` を設定して保存します。
-2. スマホで通知を受け取ると、ラズパイの画面に以下の順で表示されます。
-   - 受信した通知の内容
-   - `[Ollama AI 処理中...]` というメッセージ
-   - **AI（yutayuma-ai）による判定結果や回答**
+## 5. Androidアプリの設定
 
-> [!CAUTION]
-> AIの処理には時間がかかる場合があります。ラズパイのスペックによっては、応答までに数十秒から数分かかることがあるため、ターミナルの表示を待ってください。
+1.  ラズパイのIPアドレスを確認します（`hostname -I` コマンドなどで確認可能）。
+2.  Androidアプリの設定画面で、確認したIPアドレスとポート番号（5000）を入力して保存します。
+
+## 6. 動作確認
+
+スマホでGmailやLINEの通知を受け取ると、ラズパイのターミナルに受信したJSONデータが表示されます。
+
+> [!NOTE]
+> このコードは標準JDKのみを使用しているため、外部ライブラリ（GsonやJacksonなど）を使わずにJSON全体を文字列として出力します。本格的にデータを解析する場合は、ライブラリの導入を検討してください。

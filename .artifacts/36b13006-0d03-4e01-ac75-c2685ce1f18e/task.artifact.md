@@ -1,3 +1,4 @@
-- [x] Research Java integration with Ollama
-- [x] Update `raspberry_pi_setup_java.artifact.md` with Ollama instructions and updated Java code
-- [x] Create walkthrough summary
+- [x] Update `libs.versions.toml` to include OkHttp
+- [x] Update `build.gradle.kts` with compatible SDK versions and library reference
+- [x] Update `AndroidManifest.xml` to allow cleartext traffic
+- [x] Verify build and connectivity
