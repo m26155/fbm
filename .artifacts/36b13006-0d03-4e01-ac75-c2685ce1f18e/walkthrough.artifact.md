@@ -1,24 +1,21 @@
-# Walkthrough - Fixed Raspberry Pi Connection and SDK Compatibility
+# Walkthrough - Java + Ollama AI Integration
 
-I have updated the application to resolve the connection issues with your Raspberry Pi and adjusted the SDK configuration for better device compatibility.
+Raspberry Pi側のJavaサーバーを更新し、通知を受信した際に自動的にAIモデル（Ollama）を実行してメッセージを解析するようにしました。
 
-## Changes Made
+## 変更点
 
-### Network Security
-- **[AndroidManifest.xml](file:///C:/Users/ytaka/fbm/app/src/main/AndroidManifest.xml)**: Added `android:usesCleartextTraffic="true"` to allow HTTP communication with the Raspberry Pi. This fixes the "CLEARTEXT communication not permitted" error.
+### ガイドの更新
+- **[raspberry_pi_setup_java.artifact.md](file:///C:/Users/ytaka/fbm/.artifacts/36b13006-0d03-4e01-ac75-c2685ce1f18e/raspberry_pi_setup_java.artifact.md)** を更新しました。
+    - **Ollamaのインストール手順:** ラズパイでAIを動かすためのセットアップ方法を追記しました。
+    - **Javaコードの刷新:** 受信したJSONデータからメッセージ内容を抽出し、`ProcessBuilder` を使って `ollama run yutayuma-ai` をコマンドラインから実行するロジックを実装しました。
+    - **AI応答の表示:** AIが生成したテキストをリアルタイムでコンソールに出力する処理を追加しました。
 
-### Build Configuration
-- **[build.gradle.kts](file:///C:/Users/ytaka/fbm/app/build.gradle.kts)**:
-    - Set `minSdk = 26` (Android 8.0) to ensure it runs on your Pixel 8a and other stable devices.
-    - Set `targetSdk = 35` (Android 15) to follow current standards.
-    - Set `compileSdk = 36` to satisfy dependency requirements while maintaining runtime compatibility.
-- **[libs.versions.toml](file:///C:/Users/ytaka/fbm/gradle/libs.versions.toml)**: Formally added OkHttp to the version catalog for cleaner dependency management.
+## 使い方
 
-## Verification Results
+1. ラズパイ側で新しい `NotificationServer.java` を作成・上書きします。
+2. `javac NotificationServer.java` でコンパイルし、`java NotificationServer` で実行します。
+3. Androidアプリから通知が届くと、ラズパイの画面上で自動的にAIによる解析が始まります。
 
-### Automated Tests
-- Ran `gradle assembleDebug` and the build passed successfully.
-
-### Connectivity Check
-- The app is now configured to allow unencrypted (HTTP) requests to your Raspberry Pi's IP address.
-- Please verify by running the app and sending a test notification. The logs should no longer show "UnknownServiceException: CLEARTEXT communication not permitted".
+## 注意事項
+- ラズパイのスペックによりAIの応答速度が異なります。
+- `yutayuma-ai` というモデルがラズパイに作成されている必要があります。
