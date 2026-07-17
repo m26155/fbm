@@ -1,6 +1,0 @@
-- [x] Update `libs.versions.toml` to include OkHttp
-- [x] Update `build.gradle.kts` with compatible SDK versions and library reference
-- [x] Update `AndroidManifest.xml` to allow cleartext traffic
-- [x] Verify build and connectivity
-- [x] Update `raspberry_pi_setup_java.artifact.md` with robust logging and AI processing
-- [x] Provide walkthrough for AI response fixes
