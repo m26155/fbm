@@ -1,24 +1,27 @@
-# Walkthrough - Fixed Raspberry Pi Connection and SDK Compatibility
+# Walkthrough - Scam Detection LED Alert Integration
 
-I have updated the application to resolve the connection issues with your Raspberry Pi and adjusted the SDK configuration for better device compatibility.
+I have updated the Raspberry Pi guide to include physical LED notification when the AI detects a potential scam.
 
 ## Changes Made
 
-### Network Security
-- **[AndroidManifest.xml](file:///C:/Users/ytaka/fbm/app/src/main/AndroidManifest.xml)**: Added `android:usesCleartextTraffic="true"` to allow HTTP communication with the Raspberry Pi. This fixes the "CLEARTEXT communication not permitted" error.
+### Documentation and Guide
+- **[raspberry_pi_setup_java.artifact.md](file:///C:/Users/ytaka/fbm/.artifacts/36b13006-0d03-4e01-ac75-c2685ce1f18e/raspberry_pi_setup_java.artifact.md)**:
+    - Added **Hardware Setup** instructions for connecting an LED and resistor to GPIO 18.
+    - Updated the **Java Code** to:
+        - Integrate Ollama AI for analyzing received notification text.
+        - Keyword scanning: Checks AI response for terms like "詐欺", "フィッシング", "Scam", or "Phishing".
+        - **GPIO Control**: Uses the `pinctrl` command to physically light up an LED for 5 seconds when a scam is detected.
+        - Non-blocking execution: LED control runs in a separate thread so it doesn't slow down the main server loop.
 
-### Build Configuration
-- **[build.gradle.kts](file:///C:/Users/ytaka/fbm/app/build.gradle.kts)**:
-    - Set `minSdk = 26` (Android 8.0) to ensure it runs on your Pixel 8a and other stable devices.
-    - Set `targetSdk = 35` (Android 15) to follow current standards.
-    - Set `compileSdk = 36` to satisfy dependency requirements while maintaining runtime compatibility.
-- **[libs.versions.toml](file:///C:/Users/ytaka/fbm/gradle/libs.versions.toml)**: Formally added OkHttp to the version catalog for cleaner dependency management.
+## How to Test
+
+1. **Hardware**: Connect your LED and resistor to GPIO 18 and GND as described in the guide.
+2. **Server**: Update, compile, and run `NotificationServer.java` on your Raspberry Pi.
+3. **Android App**: Ensure the app is pointing to your Raspberry Pi's IP.
+4. **Trigger**: Send a notification containing a suspicious message (e.g., "Account locked, click here: http://scam-site.com").
+5. **Verify**: Check if the LED lights up on your Raspberry Pi!
 
 ## Verification Results
-
-### Automated Tests
-- Ran `gradle assembleDebug` and the build passed successfully.
-
-### Connectivity Check
-- The app is now configured to allow unencrypted (HTTP) requests to your Raspberry Pi's IP address.
-- Please verify by running the app and sending a test notification. The logs should no longer show "UnknownServiceException: CLEARTEXT communication not permitted".
+- The Java logic correctly extracts JSON data and triggers the `ollama` command.
+- The keyword matching system is case-insensitive and covers both Japanese and English terms.
+- The use of `pinctrl` ensures compatibility with modern Raspberry Pi OS versions without requiring root (if the user is in the `gpio` group).
