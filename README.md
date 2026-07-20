@@ -10,9 +10,9 @@
 ## For Developer
 ### アプリ側
 1. [Android Studioをダウンロード](https://developer.android.com/studio?hl=ja)
-2. 任意の場所でアドレスバーにcmdと入力
+2. 任意の場所でエクスプローラーのアドレスバーにcmdと入力
 3. 'winget install --id Git.Git -e --source winget'を実行(Gitをインストール)
-4. 'git clone https://github.com/m26155/fbm.git' を実行
+4. 'git clone https://github.com/m26155/fbm.git' を実行(クローン)
 5. Android Studioで任意の場所\fbmを開く
 6. 実行設定を構成
 7. Androidデバイスを接続 
