@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "418222228962",
+    "project_id": "phisingtaisaku",
+    "storage_bucket": "phisingtaisaku.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:418222228962:android:816b3584d2c2ca831aa5bb",
+        "android_client_info": {
+          "package_name": "com.example.fbm"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCudBg4FGePb9ke8Q-ZGCaZ87aUIT1L1e8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
