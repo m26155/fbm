@@ -18,5 +18,7 @@
 7. Androidデバイスを接続 
 8. Run
 
+ℹ️デバッグapkはこのリポジトリをフォークしてアクションを実行すると作れます
+
 ### ラズベリーパイ側
 [ラズパイ側説明書](https://github.com/m26155/fbm/blob/master/.artifacts/guide/raspberry_pi_setup_java.artifact.md)
