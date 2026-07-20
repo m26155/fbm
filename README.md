@@ -8,7 +8,7 @@
 
 たったそれだけです！
 ## For Developer
-### アプリ側
+### アプリ側(Windows)
 1. [Android Studioをダウンロード](https://developer.android.com/studio?hl=ja)
 2. 任意の場所でエクスプローラーのアドレスバーにcmdと入力
 3. `winget install --id Git.Git -e --source winget`を実行(Gitをインストール)
