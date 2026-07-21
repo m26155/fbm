@@ -1,3 +1,0 @@
-- [x] Update `raspberry_pi_setup_java.artifact.md` with HTTP API logic
-- [x] Verify Java code structure for compatibility (Java 11+)
-- [x] Provide walkthrough of changes
