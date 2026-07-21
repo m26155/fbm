@@ -1,16 +1,22 @@
-# Raspberry Pi サーバー設定ガイド (接続エラー修正版)
+# Raspberry Pi サーバー設定ガイド (究極デバッグ版)
 
-通知受信、AI（Ollama）解析、LED通知を行うJavaプログラムの**最終安定版**です。`localhost` の接続エラーを回避し、起動時に自動診断を行う機能を追加しました。
+通信エラーが解消しない場合、このプログラムを使用してエラーの正体を特定します。
 
-## 1. 準備するもの
+## 1. 準備 (ラズパイのメモリ確保)
 
-- Raspberry Pi (Java JDK 11以上)
-- Ollama (yutayuma-ai モデル準備済み)
-- LED + 抵抗 (GPIO 18に接続)
+ラズパイでAIを動かす際、メモリが不足するとOSが勝手にプロセスを終了させます。実行前に以下のコマンドでメモリ状態を確認してください。
+
+```bash
+# メモリ空き容量の確認
+free -h
+
+# Ollamaが動いているか確認
+ollama ps
+```
 
 ## 2. プログラムの作成 (NotificationServer.java)
 
-このバージョンでは、`localhost` ではなく **`127.0.0.1`** を使用し、起動時にOllamaの状態をチェックします。
+このコードは、エラーが発生した際にその詳細（スタックトレース）をすべて表示します。
 
 ```java
 import com.sun.net.httpserver.HttpExchange;
@@ -24,181 +30,119 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Scanner;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class NotificationServer {
     private static final int LED_PIN = 18;
-    // localhostではなく明示的にIPv4の127.0.0.1を指定
-    private static final String OLLAMA_BASE_URL = "http://127.0.0.1:11434";
+    private static final String OLLAMA_URL = "http://127.0.0.1:11434/api/generate";
     private static final String MODEL_NAME = "yutayuma-ai";
 
     private static final HttpClient httpClient = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(10))
+            .connectTimeout(Duration.ofSeconds(20))
             .build();
 
     public static void main(String[] args) throws IOException {
-        // 1. 起動時にOllamaの接続確認を行う
-        if (!checkOllamaConnectivity()) {
-            System.err.println("\n❌ エラー: Ollama APIに接続できません。");
-            System.err.println("以下の点を確認してください：");
-            System.err.println("1. 'ollama serve' が実行されているか");
-            System.err.println("2. 'curl " + OLLAMA_BASE_URL + "' で応答があるか");
-            return; // 接続できない場合は起動しない
-        }
-        System.out.println("✅ Ollama API への接続を確認しました。");
+        System.out.println("--- サーバー起動プロセス開始 ---");
 
-        int port = 5000;
-        HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
+        // 起動時チェック
+        try {
+            System.out.println("Ollama APIの状態を確認しています...");
+            HttpRequest req = HttpRequest.newBuilder().uri(URI.create("http://127.0.0.1:11434")).GET().build();
+            httpClient.send(req, HttpResponse.BodyHandlers.ofString());
+            System.out.println("✅ Ollama API への接続は正常です。");
+        } catch (Exception e) {
+            System.err.println("❌ Ollamaに接続できません！ 'ollama serve' が動いているか確認してください。");
+            System.err.println("エラー詳細: " + e.getMessage());
+        }
+
+        HttpServer server = HttpServer.create(new InetSocketAddress(5000), 0);
         server.createContext("/notify", new NotificationHandler());
         server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool());
 
-        // LED初期化
-        runCommand("pinctrl", String.valueOf(LED_PIN), "op", "dl");
+        // LED初期化（失敗しても続行）
+        try { new ProcessBuilder("pinctrl", "18", "op", "dl").start(); } catch (Exception e) {}
 
-        System.out.println("Java Server started on port " + port);
-        System.out.println("Waiting for notifications...");
+        System.out.println("🚀 待機中... (Port: 5000)");
         server.start();
-    }
-
-    private static boolean checkOllamaConnectivity() {
-        System.out.println("Ollama API (" + OLLAMA_BASE_URL + ") の状態を確認中...");
-        try {
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(OLLAMA_BASE_URL))
-                    .GET()
-                    .timeout(Duration.ofSeconds(5))
-                    .build();
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            return response.statusCode() == 200;
-        } catch (Exception e) {
-            System.err.println("接続テスト失敗: " + e.getMessage());
-            return false;
-        }
     }
 
     static class NotificationHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
-            if ("POST".equals(exchange.getRequestMethod())) {
-                InputStream is = exchange.getRequestBody();
-                String body;
-                try (Scanner scanner = new Scanner(is, StandardCharsets.UTF_8.name())) {
-                    body = scanner.hasNext() ? scanner.useDelimiter("\\A").next() : "";
-                }
-
-                System.out.println("\n[通知受信]: " + body);
-                String message = extractValue(body, "text");
-
-                // Android側に即レスポンス
-                sendResponse(exchange, "{\"status\":\"success\"}");
-
-                // AI解析を非同期で開始
-                if (!message.equals("Unknown") && !message.isEmpty()) {
-                    new Thread(() -> {
-                        String aiResponse = callOllamaApi(message);
-                        checkAndAlert(aiResponse);
-                    }).start();
-                }
-            } else {
+            if (!"POST".equals(exchange.getRequestMethod())) {
                 exchange.sendResponseHeaders(405, -1);
+                return;
             }
-        }
 
-        private void sendResponse(HttpExchange exchange, String response) throws IOException {
+            InputStream is = exchange.getRequestBody();
+            String body;
+            try (Scanner scanner = new Scanner(is, StandardCharsets.UTF_8.name())) {
+                body = scanner.hasNext() ? scanner.useDelimiter("\\A").next() : "";
+            }
+
+            System.out.println("\n[通知受信]: " + body);
+
+            // 簡易的な値抽出
+            String message = "";
+            if (body.contains("\"text\":")) {
+                int start = body.indexOf("\"text\":\"") + 8;
+                int end = body.indexOf("\"", start);
+                if (start > 7 && end > start) message = body.substring(start, end);
+            }
+
+            // Androidに即レスポンス
+            String response = "{\"status\":\"received\"}";
             exchange.getResponseHeaders().set("Content-Type", "application/json");
             exchange.sendResponseHeaders(200, response.length());
-            try (OutputStream os = exchange.getResponseBody()) {
-                os.write(response.getBytes());
+            try (OutputStream os = exchange.getResponseBody()) { os.write(response.getBytes()); }
+
+            if (!message.isEmpty()) {
+                String finalMsg = message;
+                new Thread(() -> processAi(finalMsg)).start();
             }
         }
 
-        private String callOllamaApi(String prompt) {
-            System.out.println("\n[Ollama API 解析開始]");
-            String jsonRequest = String.format(
-                "{\"model\":\"%s\",\"prompt\":\"%s\",\"stream\":false}",
-                MODEL_NAME, prompt.replace("\"", "\\\"").replace("\n", " ")
-            );
+        private void processAi(String prompt) {
+            System.out.println("\n[Ollama 解析プロセス開始]");
+            // JSONの安全な作成（エスケープ強化）
+            String safePrompt = prompt.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", " ");
+            String jsonRequest = "{\"model\":\"" + MODEL_NAME + "\",\"prompt\":\"" + safePrompt + "\",\"stream\":false}";
 
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(OLLAMA_BASE_URL + "/api/generate"))
+                    .uri(URI.create(OLLAMA_URL))
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(jsonRequest, StandardCharsets.UTF_8))
-                    .timeout(Duration.ofSeconds(120)) // ラズパイ用に2分まで待機
+                    .timeout(Duration.ofMinutes(10)) // 10分待機
                     .build();
 
             try {
+                System.out.println("APIリクエスト送信中... (最大10分待ちます)");
                 HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
                 if (response.statusCode() == 200) {
-                    String aiText = extractValue(response.body(), "response");
-                    System.out.println("--- AIの回答 ---");
-                    System.out.println(aiText);
-                    System.out.println("----------------");
-                    return aiText;
+                    System.out.println("--- AI解析完了 ---");
+                    System.out.println(response.body());
                 } else {
-                    System.err.println("APIエラー (HTTP " + response.statusCode() + "): " + response.body());
+                    System.err.println("⚠️ Ollamaがエラーを返しました (HTTP " + response.statusCode() + ")");
+                    System.err.println("内容: " + response.body());
                 }
+            } catch (HttpTimeoutException e) {
+                System.err.println("❌ タイムアウトエラー: 10分以内にAIが回答しませんでした。ラズパイの負荷が高すぎます。");
             } catch (Exception e) {
-                System.err.println("AI解析通信エラー: " + e.getMessage());
+                System.err.println("❌ 致命的な通信エラーが発生しました：");
+                e.printStackTrace(); // エラーの全容を表示
             }
-            return "";
-        }
-
-        private void checkAndAlert(String aiResponse) {
-            if (aiResponse.contains("詐欺") || aiResponse.contains("フィッシング") ||
-                aiResponse.contains("scam") || aiResponse.contains("phishing")) {
-                System.out.println("⚠️ 詐欺検出！LED点灯開始...");
-                triggerLed();
-            } else if (!aiResponse.isEmpty()) {
-                System.out.println("✅ 安全なメッセージ");
-            }
-        }
-
-        private void triggerLed() {
-            try {
-                runCommand("pinctrl", String.valueOf(LED_PIN), "op", "dh");
-                Thread.sleep(5000);
-                runCommand("pinctrl", String.valueOf(LED_PIN), "op", "dl");
-            } catch (Exception e) {
-                System.err.println("LED制御失敗: " + e.getMessage());
-            }
-        }
-
-        private String extractValue(String json, String key) {
-            Pattern pattern = Pattern.compile("\"" + key + "\":\\s*\"((?:\\\\\"|[^\"])*)\"");
-            Matcher matcher = pattern.matcher(json);
-            if (matcher.find()) {
-                return matcher.group(1).replace("\\\"", "\"").replace("\\n", "\n").replace("\\r", "");
-            }
-            return "Unknown";
-        }
-    }
-
-    private static void runCommand(String... args) {
-        try {
-            new ProcessBuilder(args).start().waitFor();
-        } catch (Exception e) {
-            System.err.println("コマンド失敗: " + e.getMessage());
         }
     }
 }
 ```
 
-## 3. 実行手順
+## 3. トラブル解消のヒント
 
-1. ラズパイ側で `NotificationServer.java` を上書きします。
-2. コンパイルと実行:
-   ```bash
-   javac NotificationServer.java
-   java NotificationServer
-   ```
+このプログラムを実行してもエラーが出る場合は、ターミナルに表示される **`java.net.ConnectException`** や **`HttpTimeoutException`** などの英語のメッセージを教えてください。
 
-## 4. トラブルシューティング
-
-- **「接続テスト失敗: Connection refused」と出る場合**:
-  Ollamaが起動していないか、ポート番号が異なります。`ollama serve` を実行してください。
-- **AIの回答が非常に遅い場合**:
-  ラズパイ 4 以前のモデルでは解析に時間がかかることがあります。プログラムは最大2分間待ちますが、それ以上かかる場合はより軽量なモデル（`phi3:mini` など）を試してみてください。
+1.  **モデルを軽くする**: `llama3` などが重い場合は `ollama run tinyllama` などの軽量モデルに変更して、`MODEL_NAME` を書き換えてみてください。
+2.  **スワップメモリの増設**: ラズパイのメモリが足りない場合は、SDカードを一時的なメモリとして使う「スワップ」を増やすことで安定します。
