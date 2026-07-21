@@ -13,6 +13,4 @@
 .externalNativeBuild
 .cxx
 local.properties
-/.artifacts/guide/implementation_plan.artifact.md
-/.artifacts/guide/task.artifact.md
-/.artifacts/guide/walkthrough.artifact.md
+/.artifacts/plan
