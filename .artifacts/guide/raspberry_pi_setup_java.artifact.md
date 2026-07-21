@@ -1,25 +1,16 @@
-# Raspberry Pi サーバー設定ガイド (API連携版)
+# Raspberry Pi サーバー設定ガイド (接続エラー修正版)
 
-このガイドでは、通知を受信し、ラズパイ上のOllamaの**HTTP API**を直接叩いてAI解析を行い、詐欺の場合にLEDを光らせる**最も安定したプログラム**の構築手順を説明します。
+通知受信、AI（Ollama）解析、LED通知を行うJavaプログラムの**最終安定版**です。`localhost` の接続エラーを回避し、起動時に自動診断を行う機能を追加しました。
 
 ## 1. 準備するもの
 
-- Raspberry Pi (Java JDK 11以上インストール済み)
+- Raspberry Pi (Java JDK 11以上)
 - Ollama (yutayuma-ai モデル準備済み)
 - LED + 抵抗 (GPIO 18に接続)
 
-## 2. Ollama APIの動作確認
+## 2. プログラムの作成 (NotificationServer.java)
 
-プログラムを動かす前に、ラズパイのターミナルでAPIが反応するか確認してください。
-
-```bash
-curl http://localhost:11434/api/tags
-```
-モデル一覧のJSONが返ってくれば準備完了です。
-
-## 3. プログラムの作成 (NotificationServer.java)
-
-このバージョンでは、コマンド実行（CLI）ではなくAPI経由で通信するため、出力が途切れたり文字化けしたりする問題が解消されています。
+このバージョンでは、`localhost` ではなく **`127.0.0.1`** を使用し、起動時にOllamaの状態をチェックします。
 
 ```java
 import com.sun.net.httpserver.HttpExchange;
@@ -41,25 +32,52 @@ import java.util.regex.Pattern;
 
 public class NotificationServer {
     private static final int LED_PIN = 18;
-    private static final String OLLAMA_URL = "http://localhost:11434/api/generate";
+    // localhostではなく明示的にIPv4の127.0.0.1を指定
+    private static final String OLLAMA_BASE_URL = "http://127.0.0.1:11434";
     private static final String MODEL_NAME = "yutayuma-ai";
+
     private static final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
             .build();
 
     public static void main(String[] args) throws IOException {
+        // 1. 起動時にOllamaの接続確認を行う
+        if (!checkOllamaConnectivity()) {
+            System.err.println("\n❌ エラー: Ollama APIに接続できません。");
+            System.err.println("以下の点を確認してください：");
+            System.err.println("1. 'ollama serve' が実行されているか");
+            System.err.println("2. 'curl " + OLLAMA_BASE_URL + "' で応答があるか");
+            return; // 接続できない場合は起動しない
+        }
+        System.out.println("✅ Ollama API への接続を確認しました。");
+
         int port = 5000;
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
         server.createContext("/notify", new NotificationHandler());
         server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool());
 
-        // 初期化
+        // LED初期化
         runCommand("pinctrl", String.valueOf(LED_PIN), "op", "dl");
 
         System.out.println("Java Server started on port " + port);
-        System.out.println("Ollama API Target: " + OLLAMA_URL);
         System.out.println("Waiting for notifications...");
         server.start();
+    }
+
+    private static boolean checkOllamaConnectivity() {
+        System.out.println("Ollama API (" + OLLAMA_BASE_URL + ") の状態を確認中...");
+        try {
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(OLLAMA_BASE_URL))
+                    .GET()
+                    .timeout(Duration.ofSeconds(5))
+                    .build();
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            return response.statusCode() == 200;
+        } catch (Exception e) {
+            System.err.println("接続テスト失敗: " + e.getMessage());
+            return false;
+        }
     }
 
     static class NotificationHandler implements HttpHandler {
@@ -73,18 +91,12 @@ public class NotificationServer {
                 }
 
                 System.out.println("\n[通知受信]: " + body);
-
                 String message = extractValue(body, "text");
 
                 // Android側に即レスポンス
-                String response = "{\"status\":\"success\"}";
-                exchange.getResponseHeaders().set("Content-Type", "application/json");
-                exchange.sendResponseHeaders(200, response.length());
-                try (OutputStream os = exchange.getResponseBody()) {
-                    os.write(response.getBytes());
-                }
+                sendResponse(exchange, "{\"status\":\"success\"}");
 
-                // AI解析をバックグラウンドで開始
+                // AI解析を非同期で開始
                 if (!message.equals("Unknown") && !message.isEmpty()) {
                     new Thread(() -> {
                         String aiResponse = callOllamaApi(message);
@@ -96,36 +108,41 @@ public class NotificationServer {
             }
         }
 
-        private String callOllamaApi(String prompt) {
-            System.out.println("\n[Ollama API リクエスト送信中...]");
+        private void sendResponse(HttpExchange exchange, String response) throws IOException {
+            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, response.length());
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(response.getBytes());
+            }
+        }
 
-            // JSONボディを手動作成 (stream: false で一括受信)
+        private String callOllamaApi(String prompt) {
+            System.out.println("\n[Ollama API 解析開始]");
             String jsonRequest = String.format(
                 "{\"model\":\"%s\",\"prompt\":\"%s\",\"stream\":false}",
-                MODEL_NAME, prompt.replace("\"", "\\\"")
+                MODEL_NAME, prompt.replace("\"", "\\\"").replace("\n", " ")
             );
 
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(OLLAMA_URL))
+                    .uri(URI.create(OLLAMA_BASE_URL + "/api/generate"))
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(jsonRequest, StandardCharsets.UTF_8))
-                    .timeout(Duration.ofSeconds(60)) // AIの思考時間に余裕を持たせる
+                    .timeout(Duration.ofSeconds(120)) // ラズパイ用に2分まで待機
                     .build();
 
             try {
                 HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
                 if (response.statusCode() == 200) {
-                    // レスポンスから "response" フィールドを抽出
                     String aiText = extractValue(response.body(), "response");
                     System.out.println("--- AIの回答 ---");
                     System.out.println(aiText);
                     System.out.println("----------------");
                     return aiText;
                 } else {
-                    System.err.println("APIエラー (Code: " + response.statusCode() + "): " + response.body());
+                    System.err.println("APIエラー (HTTP " + response.statusCode() + "): " + response.body());
                 }
             } catch (Exception e) {
-                System.err.println("通信エラー: " + e.getMessage());
+                System.err.println("AI解析通信エラー: " + e.getMessage());
             }
             return "";
         }
@@ -133,7 +150,7 @@ public class NotificationServer {
         private void checkAndAlert(String aiResponse) {
             if (aiResponse.contains("詐欺") || aiResponse.contains("フィッシング") ||
                 aiResponse.contains("scam") || aiResponse.contains("phishing")) {
-                System.out.println("⚠️ 詐欺検出！LED点灯");
+                System.out.println("⚠️ 詐欺検出！LED点灯開始...");
                 triggerLed();
             } else if (!aiResponse.isEmpty()) {
                 System.out.println("✅ 安全なメッセージ");
@@ -170,11 +187,18 @@ public class NotificationServer {
 }
 ```
 
+## 3. 実行手順
+
+1. ラズパイ側で `NotificationServer.java` を上書きします。
+2. コンパイルと実行:
+   ```bash
+   javac NotificationServer.java
+   java NotificationServer
+   ```
+
 ## 4. トラブルシューティング
 
-1.  **AIの回答が空の場合**:
-    ラズパイで `curl -X POST http://localhost:11434/api/generate -d '{"model":"yutayuma-ai","prompt":"hello","stream":false}'` を実行し、JSONが返るか確認してください。
-2.  **Javaのバージョン**:
-    このコードは Java 11 以降の `HttpClient` を使用しています。`java -version` で 11 以上であることを確認してください。
-3.  **モデル名**:
-    プログラム内の `MODEL_NAME` が正しいか確認してください。
+- **「接続テスト失敗: Connection refused」と出る場合**:
+  Ollamaが起動していないか、ポート番号が異なります。`ollama serve` を実行してください。
+- **AIの回答が非常に遅い場合**:
+  ラズパイ 4 以前のモデルでは解析に時間がかかることがあります。プログラムは最大2分間待ちますが、それ以上かかる場合はより軽量なモデル（`phi3:mini` など）を試してみてください。
