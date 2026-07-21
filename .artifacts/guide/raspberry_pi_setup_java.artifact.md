@@ -1,44 +1,63 @@
-# Raspberry Pi サーバー設定ガイド (AI判定 + LED通知版)
+# Raspberry Pi サーバー設定ガイド (API連携版)
 
-このガイドでは、通知を受信し、AI（Ollama）で解析を行い、結果を画面表示するとともに、詐欺の場合にLEDを光らせる**堅牢なプログラム**の構築手順を説明します。
+このガイドでは、通知を受信し、ラズパイ上のOllamaの**HTTP API**を直接叩いてAI解析を行い、詐欺の場合にLEDを光らせる**最も安定したプログラム**の構築手順を説明します。
 
 ## 1. 準備するもの
 
-- Raspberry Pi (Java JDKインストール済み)
+- Raspberry Pi (Java JDK 11以上インストール済み)
 - Ollama (yutayuma-ai モデル準備済み)
 - LED + 抵抗 (GPIO 18に接続)
 
-## 2. プログラムの作成 (NotificationServer.java)
+## 2. Ollama APIの動作確認
 
-この最新版では、データの受信漏れを防ぎ、AIの回答を確実に画面に表示するための改善が含まれています。
+プログラムを動かす前に、ラズパイのターミナルでAPIが反応するか確認してください。
+
+```bash
+curl http://localhost:11434/api/tags
+```
+モデル一覧のJSONが返ってくれば準備完了です。
+
+## 3. プログラムの作成 (NotificationServer.java)
+
+このバージョンでは、コマンド実行（CLI）ではなくAPI経由で通信するため、出力が途切れたり文字化けしたりする問題が解消されています。
 
 ```java
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
-import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.Scanner;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class NotificationServer {
     private static final int LED_PIN = 18;
+    private static final String OLLAMA_URL = "http://localhost:11434/api/generate";
+    private static final String MODEL_NAME = "yutayuma-ai";
+    private static final HttpClient httpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(10))
+            .build();
 
     public static void main(String[] args) throws IOException {
         int port = 5000;
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
         server.createContext("/notify", new NotificationHandler());
-        server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool()); // 並列処理を有効化
+        server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool());
 
+        // 初期化
         runCommand("pinctrl", String.valueOf(LED_PIN), "op", "dl");
 
         System.out.println("Java Server started on port " + port);
+        System.out.println("Ollama API Target: " + OLLAMA_URL);
         System.out.println("Waiting for notifications...");
         server.start();
     }
@@ -53,16 +72,11 @@ public class NotificationServer {
                     body = scanner.hasNext() ? scanner.useDelimiter("\\A").next() : "";
                 }
 
-                // 1. 受信した生のデータを確認（デバッグ用）
-                System.out.println("\n[Raw JSON Received]: " + body);
+                System.out.println("\n[通知受信]: " + body);
 
-                String title = extractValue(body, "title");
                 String message = extractValue(body, "text");
 
-                System.out.println("Parsed Title: " + title);
-                System.out.println("Parsed Text: " + message);
-
-                // レスポンスを先に返してスマホ側の接続を完了させる
+                // Android側に即レスポンス
                 String response = "{\"status\":\"success\"}";
                 exchange.getResponseHeaders().set("Content-Type", "application/json");
                 exchange.sendResponseHeaders(200, response.length());
@@ -70,10 +84,10 @@ public class NotificationServer {
                     os.write(response.getBytes());
                 }
 
-                // 2. AI処理を非同期（バックグラウンド）で開始
+                // AI解析をバックグラウンドで開始
                 if (!message.equals("Unknown") && !message.isEmpty()) {
                     new Thread(() -> {
-                        String aiResponse = runOllama(message);
+                        String aiResponse = callOllamaApi(message);
                         checkAndAlert(aiResponse);
                     }).start();
                 }
@@ -82,57 +96,47 @@ public class NotificationServer {
             }
         }
 
-        private String extractValue(String json, String key) {
-            // エスケープされた文字を考慮した正規表現
-            Pattern pattern = Pattern.compile("\"" + key + "\":\\s*\"((?:\\\\\"|[^\"])*)\"");
-            Matcher matcher = pattern.matcher(json);
-            if (matcher.find()) {
-                String val = matcher.group(1);
-                // 簡易的なエスケープ解除
-                return val.replace("\\\"", "\"").replace("\\n", "\n");
-            }
-            return "Unknown";
-        }
+        private String callOllamaApi(String prompt) {
+            System.out.println("\n[Ollama API リクエスト送信中...]");
 
-        private String runOllama(String text) {
-            System.out.println("\n[Ollama AI 処理開始]");
-            StringBuilder response = new StringBuilder();
-            // 引数としてテキストを渡す（非対話モード）
-            ProcessBuilder pb = new ProcessBuilder("ollama", "run", "yutayuma-ai", text);
-            pb.redirectErrorStream(true); // エラー出力も標準出力に統合
+            // JSONボディを手動作成 (stream: false で一括受信)
+            String jsonRequest = String.format(
+                "{\"model\":\"%s\",\"prompt\":\"%s\",\"stream\":false}",
+                MODEL_NAME, prompt.replace("\"", "\\\"")
+            );
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(OLLAMA_URL))
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonRequest, StandardCharsets.UTF_8))
+                    .timeout(Duration.ofSeconds(60)) // AIの思考時間に余裕を持たせる
+                    .build();
 
             try {
-                Process process = pb.start();
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                    String line;
+                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+                if (response.statusCode() == 200) {
+                    // レスポンスから "response" フィールドを抽出
+                    String aiText = extractValue(response.body(), "response");
                     System.out.println("--- AIの回答 ---");
-                    while ((line = reader.readLine()) != null) {
-                        // ANSIエスケープコード（装飾やプログレスバー）を除去
-                        String cleanLine = line.replaceAll("\\x1B\\[[0-9;]*[a-zA-Z]", "");
-                        if (!cleanLine.trim().isEmpty()) {
-                            System.out.println(cleanLine);
-                            response.append(cleanLine).append(" ");
-                        }
-                    }
+                    System.out.println(aiText);
                     System.out.println("----------------");
+                    return aiText;
+                } else {
+                    System.err.println("APIエラー (Code: " + response.statusCode() + "): " + response.body());
                 }
-                int exitCode = process.waitFor();
-                if (exitCode != 0) System.err.println("Ollama実行エラー。終了コード: " + exitCode);
             } catch (Exception e) {
-                System.err.println("実行失敗: " + e.getMessage());
+                System.err.println("通信エラー: " + e.getMessage());
             }
-            return response.toString();
+            return "";
         }
 
         private void checkAndAlert(String aiResponse) {
-            String lowerResponse = aiResponse.toLowerCase();
-            if (lowerResponse.contains("詐欺") || lowerResponse.contains("フィッシング") ||
-                lowerResponse.contains("scam") || lowerResponse.contains("phishing")) {
-
-                System.out.println("⚠️ 詐欺検出: LED点灯中...");
+            if (aiResponse.contains("詐欺") || aiResponse.contains("フィッシング") ||
+                aiResponse.contains("scam") || aiResponse.contains("phishing")) {
+                System.out.println("⚠️ 詐欺検出！LED点灯");
                 triggerLed();
-            } else {
-                System.out.println("✅ 安全判定");
+            } else if (!aiResponse.isEmpty()) {
+                System.out.println("✅ 安全なメッセージ");
             }
         }
 
@@ -142,8 +146,17 @@ public class NotificationServer {
                 Thread.sleep(5000);
                 runCommand("pinctrl", String.valueOf(LED_PIN), "op", "dl");
             } catch (Exception e) {
-                System.err.println("LED制御エラー: " + e.getMessage());
+                System.err.println("LED制御失敗: " + e.getMessage());
             }
+        }
+
+        private String extractValue(String json, String key) {
+            Pattern pattern = Pattern.compile("\"" + key + "\":\\s*\"((?:\\\\\"|[^\"])*)\"");
+            Matcher matcher = pattern.matcher(json);
+            if (matcher.find()) {
+                return matcher.group(1).replace("\\\"", "\"").replace("\\n", "\n").replace("\\r", "");
+            }
+            return "Unknown";
         }
     }
 
@@ -151,19 +164,17 @@ public class NotificationServer {
         try {
             new ProcessBuilder(args).start().waitFor();
         } catch (Exception e) {
-            System.err.println("コマンドエラー: " + e.getMessage());
+            System.err.println("コマンド失敗: " + e.getMessage());
         }
     }
 }
 ```
 
-## 3. トラブルシューティング
+## 4. トラブルシューティング
 
-もしAIの回答が表示されない場合は、以下の点を確認してください。
-
-1.  **手動実行テスト**:
-    ラズパイのターミナルで `ollama run yutayuma-ai "テストメッセージ"` を直接入力し、回答が返ってくるか確認してください。
-2.  **実行権限**:
-    `pinctrl` などのコマンドが権限エラーになる場合は、`sudo java NotificationServer` で実行してください。
+1.  **AIの回答が空の場合**:
+    ラズパイで `curl -X POST http://localhost:11434/api/generate -d '{"model":"yutayuma-ai","prompt":"hello","stream":false}'` を実行し、JSONが返るか確認してください。
+2.  **Javaのバージョン**:
+    このコードは Java 11 以降の `HttpClient` を使用しています。`java -version` で 11 以上であることを確認してください。
 3.  **モデル名**:
-    コード内の `"yutayuma-ai"` が、実際に作成したモデル名と完全に一致しているか確認してください。
+    プログラム内の `MODEL_NAME` が正しいか確認してください。
