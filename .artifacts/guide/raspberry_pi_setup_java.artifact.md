@@ -1,23 +1,17 @@
-# Raspberry Pi サーバー設定ガイド (Java版)
 # Raspberry Pi サーバー設定ガイド (AI判定 + LED通知版)
 
-このガイドでは、Javaを使用して、Androidアプリからの通知を受け取るためのサーバーをRaspberry Pi上に構築する手順を説明します。
 このガイドでは、Javaを使用して通知を受け取り、AI（Ollama）で詐欺判定を行い、**詐欺と判定された場合に物理LEDを光らせる**手順を説明します。
 
 ## 1. 準備するもの
 
-- Raspberry Pi (Java JDKがインストール済みであること)
-- インターネット接続環境
 - Raspberry Pi (Java JDKインストール済み)
 - Ollama (yutayuma-ai モデルが準備済みであること)
 - **LED** (1個)
 - **抵抗** (220Ω〜330Ω程度、1個)
 - ジャンパー線
 
-## 2. Javaの確認
 ## 2. ハードウェアの接続
 
-ラズパイのターミナルで以下のコマンドを実行し、Javaがインストールされているか確認してください。
 ラズパイの電源を切った状態で、以下のように接続してください。
 
 - **LEDのアノード（長い方の足）**: 抵抗を介して **GPIO 18** (物理ピン 12番) に接続
@@ -26,19 +20,15 @@
 ## 3. Ollamaの準備
 
 ```bash
-java -version
 # Ollamaのインストール
 curl -fsSL https://ollama.com/install.sh | sh
 
 # モデルの確認
 ollama list
 ```
-インストールされていない場合は、`sudo apt update && sudo apt install default-jdk` でインストールできます。
 
-## 3. 受信用プログラムの作成
 ## 4. プログラムの作成 (NotificationServer.java)
 
-任意のディレクトリに `NotificationServer.java` という名前でファイルを作成し、以下のコードを貼り付けて保存してください。
 以下のコードは、AIの回答の中に「詐欺」「フィッシング」「scam」「phishing」などの言葉が含まれているかチェックし、含まれている場合にLEDを5秒間点灯させます。
 
 ```java
@@ -59,42 +49,30 @@ import java.util.regex.Pattern;
 public class NotificationServer {
     private static final int LED_PIN = 18; // BCM番号
 
-public static void main(String[] args) throws IOException {
-        // Androidアプリの設定と合わせるポート番号（デフォルト: 5000）
-int port = 5000;
-HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
-
-        // /notify エンドポイントを作成
-server.createContext("/notify", new NotificationHandler());
-        server.setExecutor(null); // デフォルトのエグゼキュータを使用
+    public static void main(String[] args) throws IOException {
+        int port = 5000;
+        HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
+        server.createContext("/notify", new NotificationHandler());
         server.setExecutor(null);
 
         // 初期状態としてLEDをオフに設定
         runCommand("pinctrl", String.valueOf(LED_PIN), "op", "dl");
 
-System.out.println("Java Server started on port " + port);
-        System.out.println("Waiting for notifications...");
+        System.out.println("Java Server started on port " + port);
         System.out.println("LED Alert System ready (GPIO " + LED_PIN + ")");
-server.start();
-}
+        server.start();
+    }
 
-static class NotificationHandler implements HttpHandler {
-@Override
-public void handle(HttpExchange exchange) throws IOException {
-            // POSTメソッドのみ許可
-if ("POST".equals(exchange.getRequestMethod())) {
-                // リクエストボディ（JSON）の読み取り
-InputStream is = exchange.getRequestBody();
-String body;
-try (Scanner scanner = new Scanner(is, StandardCharsets.UTF_8.name())) {
-                    body = scanner.useDelimiter("\\A").next();
+    static class NotificationHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if ("POST".equals(exchange.getRequestMethod())) {
+                InputStream is = exchange.getRequestBody();
+                String body;
+                try (Scanner scanner = new Scanner(is, StandardCharsets.UTF_8.name())) {
                     body = scanner.hasNext() ? scanner.useDelimiter("\\A").next() : "";
-}
+                }
 
-                // 受信内容の表示
-                System.out.println("\n--- 通知を受信しました ---");
-                System.out.println(body);
-                System.out.println("--------------------------");
                 String title = extractValue(body, "title");
                 String message = extractValue(body, "text");
 
@@ -107,23 +85,17 @@ try (Scanner scanner = new Scanner(is, StandardCharsets.UTF_8.name())) {
                     checkAndAlert(aiResponse);
                 }
 
-                // レスポンスの送信
-String response = "{\"status\":\"success\"}";
-exchange.getResponseHeaders().set("Content-Type", "application/json");
-exchange.sendResponseHeaders(200, response.length());
-try (OutputStream os = exchange.getResponseBody()) {
-os.write(response.getBytes());
-}
-} else {
-                // POST以外は 405 Method Not Allowed
-exchange.sendResponseHeaders(405, -1);
-}
-}
-    }
-}
-```
+                String response = "{\"status\":\"success\"}";
+                exchange.getResponseHeaders().set("Content-Type", "application/json");
+                exchange.sendResponseHeaders(200, response.length());
+                try (OutputStream os = exchange.getResponseBody()) {
+                    os.write(response.getBytes());
+                }
+            } else {
+                exchange.sendResponseHeaders(405, -1);
+            }
+        }
 
-## 4. コンパイルと実行
         private String extractValue(String json, String key) {
             Pattern pattern = Pattern.compile("\"" + key + "\":\\s*\"([^\"]*)\"");
             Matcher matcher = pattern.matcher(json);
@@ -160,7 +132,6 @@ exchange.sendResponseHeaders(405, -1);
             if (lowerResponse.contains("詐欺") || lowerResponse.contains("フィッシング") ||
                 lowerResponse.contains("scam") || lowerResponse.contains("phishing")) {
 
-ラズパイのターミナルで以下の手順を実行します。
                 System.out.println("⚠️ 詐欺を検出！LEDを点灯します。");
                 triggerLed();
             } else {
@@ -168,10 +139,6 @@ exchange.sendResponseHeaders(405, -1);
             }
         }
 
-### コンパイル
-```bash
-javac NotificationServer.java
-```
         private void triggerLed() {
             new Thread(() -> {
                 try {
@@ -187,9 +154,6 @@ javac NotificationServer.java
         }
     }
 
-### 実行
-```bash
-java NotificationServer
     private static void runCommand(String... args) {
         try {
             new ProcessBuilder(args).start().waitFor();
@@ -200,13 +164,8 @@ java NotificationServer
 }
 ```
 
-起動すると `Java Server started on port 5000` と表示されます。
 ## 5. 実行手順
 
-## 5. Androidアプリの設定
-
-1.  ラズパイのIPアドレスを確認します（`hostname -I` コマンドなどで確認可能）。
-2.  Androidアプリの設定画面で、確認したIPアドレスとポート番号（5000）を入力して保存します。
 1. ラズパイ上で `NotificationServer.java` をコンパイルします。
    ```bash
    javac NotificationServer.java
@@ -218,8 +177,4 @@ java NotificationServer
 
 ## 6. 動作確認
 
-スマホでGmailやLINEの通知を受け取ると、ラズパイのターミナルに受信したJSONデータが表示されます。
-
-> [!NOTE]
-> このコードは標準JDKのみを使用しているため、外部ライブラリ（GsonやJacksonなど）を使わずにJSON全体を文字列として出力します。本格的にデータを解析する場合は、ライブラリの導入を検討してください。
 Androidアプリから詐欺を模したメッセージを送信し、AIが詐欺と判断した場合に**物理的なLEDが5秒間光る**ことを確認してください。
