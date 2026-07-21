@@ -29,7 +29,7 @@ ollama list
 
 ## 4. プログラムの作成 (NotificationServer.java)
 
-以下のコードは、AIの回答の中に「詐欺」「フィッシング」「scam」「phishing」などの言葉が含まれているかチェックし、含まれている場合にLEDを5秒間点灯させます。
+以下のコードは、AIの回答の中に「詐欺の可能性が高い」という言葉が含まれているかチェックし、含まれている場合にLEDを5秒間点灯させます。
 
 ```java
 import com.sun.net.httpserver.HttpExchange;
@@ -129,8 +129,7 @@ public class NotificationServer {
         private void checkAndAlert(String aiResponse) {
             String lowerResponse = aiResponse.toLowerCase();
             // 詐欺を疑うキーワードが含まれているかチェック
-            if (lowerResponse.contains("詐欺") || lowerResponse.contains("フィッシング") ||
-                lowerResponse.contains("scam") || lowerResponse.contains("phishing")) {
+            if (lowerResponse.contains("詐欺の可能性が高い")) {
 
                 System.out.println("⚠️ 詐欺を検出！LEDを点灯します。");
                 triggerLed();
