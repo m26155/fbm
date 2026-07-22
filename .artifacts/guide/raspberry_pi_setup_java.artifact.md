@@ -103,28 +103,41 @@ public class NotificationServer {
         }
 
         private String runOllama(String text) {
-            System.out.println("\n[AI 解析中...]");
-            StringBuilder response = new StringBuilder();
-            ProcessBuilder pb = new ProcessBuilder("ollama", "run", "yutayuma-ai", text);
-            pb.redirectErrorStream(true);
+    System.out.println("\n[AI 解析中...] プロンプト: " + text);
+    StringBuilder response = new StringBuilder();
+    ProcessBuilder pb = new ProcessBuilder("ollama", "run", "yutayuma-ai", text);
+    pb.redirectErrorStream(true);
 
-            try {
-                Process process = pb.start();
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                    String line;
-                    System.out.println("--- AIの回答 ---");
-                    while ((line = reader.readLine()) != null) {
-                        System.out.println(line);
-                        response.append(line).append(" ");
-                    }
-                    System.out.println("----------------");
-                }
-                process.waitFor();
-            } catch (Exception e) {
-                System.err.println("Ollama実行エラー: " + e.getMessage());
+    try {
+        Process process = pb.start();
+
+        // 1. 入力ストリームを即座に閉じて、Ollamaに「入力終了」を伝える
+        process.getOutputStream().close();
+
+        // 2. 文字コードを UTF-8 に明示して読み込む
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+            String line;
+            System.out.println("--- AIの回答 ---");
+            while ((line = reader.readLine()) != null) {
+                System.out.println(line);
+                response.append(line).append(" ");
             }
-            return response.toString();
+            System.out.println("----------------");
         }
+
+        int exitCode = process.waitFor();
+        if (exitCode != 0) {
+            System.err.println("Ollamaが異常終了しました (Exit Code: " + exitCode + ")");
+        }
+
+    } catch (Exception e) {
+        System.err.println("Ollama実行エラー: " + e.getMessage());
+        e.printStackTrace();
+    }
+    return response.toString();
+}
+
 
         private void checkAndAlert(String aiResponse) {
             String lowerResponse = aiResponse.toLowerCase();
