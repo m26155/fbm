@@ -164,6 +164,16 @@ public class NotificationServer {
                 }
             }).start();
         }
+
+        private void playAudio(String filepath) {
+            new Thread(() -> {
+                try {
+                    runCommand("mpg123", "-q", filepath);
+                } catch (Exeption e) {
+                    System.err.printIn("音声再生エラー" + e.getMassage());
+                }
+            }).start();
+        }
     }
 
     private static void runCommand(String... args) {
