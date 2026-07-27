@@ -32,12 +32,19 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.net.Uri;
 import android.os.Build;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+import android.content.pm.PackageManager;
+import android.Manifest;
 
 public class MainActivity extends AppCompatActivity {
 
     private AppBarConfiguration appBarConfiguration;
     private ActivityMainBinding binding;
     private NotificationReceiver notificationReceiver;
+    public static final String SCAM_CHANNEL_ID = "scam_alerts";
 
     class NotificationReceiver extends BroadcastReceiver {
         @Override
@@ -56,6 +63,9 @@ public class MainActivity extends AppCompatActivity {
 
         binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
+
+        createNotificationChannel();
+        requestNotificationPermission();
 
         ViewCompat.setOnApplyWindowInsetsListener(binding.main, (v, insets) -> {
             Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
@@ -86,6 +96,33 @@ public class MainActivity extends AppCompatActivity {
             registerReceiver(notificationReceiver, filter, Context.RECEIVER_EXPORTED);
         } else {
             registerReceiver(notificationReceiver, filter);
+        }
+    }
+
+    private void createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            CharSequence name = "詐欺警告アラート";
+            String description = "AIがフィッシング詐欺と判断した際に警告を表示します";
+            int importance = NotificationManager.IMPORTANCE_HIGH;
+            NotificationChannel channel = new NotificationChannel(SCAM_CHANNEL_ID, name, importance);
+            channel.setDescription(description);
+            channel.enableVibration(true);
+            channel.setVibrationPattern(new long[]{0, 500, 200, 500});
+
+            NotificationManager notificationManager = getSystemService(NotificationManager.class);
+            if (notificationManager != null) {
+                notificationManager.createNotificationChannel(channel);
+            }
+        }
+    }
+
+    private void requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) 
+                    != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this, 
+                        new String[]{Manifest.permission.POST_NOTIFICATIONS}, 101);
+            }
         }
     }
 

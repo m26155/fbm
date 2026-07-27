@@ -14,9 +14,15 @@ import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 
+import java.util.concurrent.TimeUnit;
+
 public class NetworkClient {
     private static final String TAG = "NetworkClient";
-    private static final OkHttpClient client = new OkHttpClient();
+    private static final OkHttpClient client = new OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(180, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .build();
     public static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
 
     public interface NetworkCallback {

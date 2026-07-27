@@ -8,6 +8,11 @@ import android.os.Bundle;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
 import android.util.Log;
+import androidx.core.app.NotificationCompat;
+import androidx.core.app.NotificationManagerCompat;
+import android.Manifest;
+import android.content.pm.PackageManager;
+import androidx.core.content.ContextCompat;
 
 public class MyNotificationListenerService extends NotificationListenerService {
 
@@ -72,7 +77,21 @@ public class MyNotificationListenerService extends NotificationListenerService {
 
         if (!rpiIp.isEmpty()) {
             String rpiUrl = "http://" + rpiIp + ":" + rpiPort + "/notify";
-            NetworkClient.sendNotification(rpiUrl, packageName, title, text, null);
+            String finalTitle = title;
+            String finalText = text;
+            NetworkClient.sendNotification(rpiUrl, packageName, title, text, new NetworkClient.NetworkCallback() {
+                @Override
+                public void onSuccess(String response) {
+                    if (response != null && response.contains("\"status\":\"danger\"")) {
+                        showScamAlert(finalTitle, finalText);
+                    }
+                }
+
+                @Override
+                public void onFailure(Exception e) {
+                    Log.e(TAG, "Network request failed", e);
+                }
+            });
         } else {
             Log.d(TAG, "RPi IP not configured, skipping send");
         }
@@ -80,6 +99,25 @@ public class MyNotificationListenerService extends NotificationListenerService {
         Intent intent = new Intent("com.example.fbm.NOTIFICATION_LISTENER_EXAMPLE");
         intent.putExtra("notification_event", "Posted: " + packageName + "\n" + title + ": " + text);
         sendBroadcast(intent);
+    }
+
+    private void showScamAlert(String originalTitle, String originalText) {
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, MainActivity.SCAM_CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.ic_dialog_alert)
+                .setContentTitle("⚠️ フィッシング詐欺の疑い")
+                .setContentText("AIがこの通知を危険と判断しました: " + originalTitle)
+                .setStyle(new NotificationCompat.BigTextStyle()
+                        .bigText("AIがフィッシング詐欺の疑いを検出しました。\n\n元の内容:\n" + originalText))
+                .setPriority(NotificationCompat.PRIORITY_MAX)
+                .setCategory(NotificationCompat.CATEGORY_ALARM)
+                .setAutoCancel(true);
+
+        NotificationManagerCompat notificationManager = NotificationManagerCompat.from(this);
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+            notificationManager.notify((int) System.currentTimeMillis(), builder.build());
+        } else {
+            Log.w(TAG, "Notification permission not granted, cannot show scam alert");
+        }
     }
 
     @Override

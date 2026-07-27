@@ -1,35 +1,21 @@
-# Raspberry Pi サーバー設定ガイド (AI判定 + LED通知版)
+# Raspberry Pi サーバー設定ガイド (AI判定 + Android通知連携版)
 
-このガイドでは、Javaを使用して通知を受け取り、AI（Ollama）で詐欺判定を行い、**詐欺と判定された場合に物理LEDを光らせる**手順を説明します。
+このガイドでは、Javaを使用して通知を受け取り、AI（Ollama）で詐欺判定を行い、その結果を**Androidスマホに返して警告通知を表示させる**手順を説明します。
 
 ## 1. 準備するもの
 
 - Raspberry Pi (Java JDKインストール済み)
 - Ollama (yutayuma-ai モデルが準備済みであること)
-- **LED** (1個)
-- **抵抗** (220Ω〜330Ω程度、1個)
-- ジャンパー線
+- **LED** (1個) & **抵抗** (220Ω程度) ※物理的な警告用
 
 ## 2. ハードウェアの接続
 
-ラズパイの電源を切った状態で、以下のように接続してください。
+- **LEDのアノード**: GPIO 18 (物理ピン 12番)
+- **LEDのカソード**: GND (物理ピン 6番)
 
-- **LEDのアノード（長い方の足）**: 抵抗を介して **GPIO 18** (物理ピン 12番) に接続
-- **LEDのカソード（短い方の足）**: **GND** (物理ピン 6番など) に接続
+## 3. プログラムの作成 (NotificationServer.java)
 
-## 3. Ollamaの準備
-
-```bash
-# Ollamaのインストール
-curl -fsSL https://ollama.com/install.sh | sh
-
-# モデルの確認
-ollama list
-```
-
-## 4. プログラムの作成 (NotificationServer.java)
-
-以下のコードは、AIの回答の中に「詐欺の可能性が高い」という言葉が含まれているかチェックし、含まれている場合にLEDを5秒間点灯させます。
+このバージョンでは、AIの解析が終わるまでレスポンスを待機し、結果（`danger` または `safe`）をスマホに返します。
 
 ```java
 import com.sun.net.httpserver.HttpExchange;
@@ -47,21 +33,18 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class NotificationServer {
-    private static final int LED_PIN = 18; // BCM番号
-    // 再生したいMP3ファイルのパスを指定（相対パスまたは絶対パス）
-    private static final String AUDIO_FILE_PATH = "alert.mp3"
+    private static final int LED_PIN = 18;
 
     public static void main(String[] args) throws IOException {
         int port = 5000;
         HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
         server.createContext("/notify", new NotificationHandler());
-        server.setExecutor(null);
+        server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool());
 
-        // 初期状態としてLEDをオフに設定
         runCommand("pinctrl", String.valueOf(LED_PIN), "op", "dl");
 
         System.out.println("Java Server started on port " + port);
-        System.out.println("LED Alert System ready (GPIO " + LED_PIN + ")");
+        System.out.println("Waiting for notifications and analyzing with AI...");
         server.start();
     }
 
@@ -82,12 +65,20 @@ public class NotificationServer {
                 System.out.println("Title: " + title);
                 System.out.println("Text: " + message);
 
+                String resultStatus = "safe";
                 if (!message.equals("Unknown")) {
+                    // AI解析を実行（結果が出るまで待機）
                     String aiResponse = runOllama(message);
-                    checkAndAlert(aiResponse);
+                    if (checkDanger(aiResponse)) {
+                        resultStatus = "danger";
+                        System.out.println("⚠️ 詐欺を検出！");
+                        triggerLed();
+                        playAudio("danger.mp3");
+                    }
                 }
 
-                String response = "{\"status\":\"success\"}";
+                // スマホに判定結果を返す
+                String response = "{\"status\":\"" + resultStatus + "\"}";
                 exchange.getResponseHeaders().set("Content-Type", "application/json");
                 exchange.sendResponseHeaders(200, response.length());
                 try (OutputStream os = exchange.getResponseBody()) {
@@ -112,52 +103,33 @@ public class NotificationServer {
 
             try {
                 Process process = pb.start();
-
-                // 1. 入力ストリームを即座に閉じて、Ollamaに「入力終了」を伝える
                 process.getOutputStream().close();
 
-                // 2. 文字コードを UTF-8 に明示して読み込む
                 try (BufferedReader reader = new BufferedReader(
                         new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
                     String line;
-                    System.out.println("--- AIの回答 ---");
                     while ((line = reader.readLine()) != null) {
                         System.out.println(line);
                         response.append(line).append(" ");
                     }
-                    System.out.println("----------------");
                 }
-
-                int exitCode = process.waitFor();
-                if (exitCode != 0) {
-                    System.err.println("Ollamaが異常終了しました (Exit Code: " + exitCode + ")");
-                }
-
+                process.waitFor();
             } catch (Exception e) {
                 System.err.println("Ollama実行エラー: " + e.getMessage());
-                e.printStackTrace();
             }
             return response.toString();
         }
 
-        private void checkAndAlert(String aiResponse) {
-            // 詐欺を疑うキーワードが含まれているかチェック（"danger"を小文字でチェック）
-            String cleanedLetters = aiResponse.replaceAll("[^a-zA-Z]", "").toLowerCase();
-            if (cleanedLetters.contains("danger")) {
-                System.out.println("⚠️ 詐欺を検出！LEDを点灯します。");
-                triggerLed();
-            } else {
-                System.out.println("✅ 安全なメッセージと判断されました。");
-            }
+        private boolean checkDanger(String aiResponse) {
+            // AIの回答に "danger" が含まれているかチェック
+            return aiResponse.replaceAll("[^a-zA-Z]", "").toLowerCase().contains("danger");
         }
 
         private void triggerLed() {
             new Thread(() -> {
                 try {
-                    // LEDオン (Drive High)
                     runCommand("pinctrl", String.valueOf(LED_PIN), "op", "dh");
-                    Thread.sleep(5000); // 5秒間点灯
-                    // LEDオフ (Drive Low)
+                    Thread.sleep(5000);
                     runCommand("pinctrl", String.valueOf(LED_PIN), "op", "dl");
                 } catch (Exception e) {
                     System.err.println("LED制御エラー: " + e.getMessage());
@@ -186,17 +158,11 @@ public class NotificationServer {
 }
 ```
 
-## 5. 実行手順
+## 4. 実行手順
 
-1. ラズパイ上で `NotificationServer.java` をコンパイルします。
-   ```bash
-   javac NotificationServer.java
-   ```
-2. サーバーを起動します。
-   ```bash
-   java NotificationServer
-   ```
+1. ラズパイ上で `NotificationServer.java` をコンパイル・実行します。
+2. Androidアプリを起動し、通知権限を許可します。
+3. 詐欺の疑いがあるメッセージを受信すると、スマホ側に警告通知が表示されます。
 
-## 6. 動作確認
-
-Androidアプリから詐欺を模したメッセージを送信し、AIが詐欺と判断した場合に**物理的なLEDが5秒間光る**ことを確認してください。
+> [!CAUTION]
+> AIの解析には時間がかかるため、元の通知が届いてからスマホ側に警告が出るまで1〜2分程度のタイムラグが発生します。
