@@ -48,6 +48,8 @@ import java.util.regex.Pattern;
 
 public class NotificationServer {
     private static final int LED_PIN = 18; // BCM番号
+    // 再生したいMP3ファイルのパスを指定（相対パスまたは絶対パス）
+    private static final String AUDIO_FILE_PATH = "alert.mp3"
 
     public static void main(String[] args) throws IOException {
         int port = 5000;
@@ -103,47 +105,45 @@ public class NotificationServer {
         }
 
         private String runOllama(String text) {
-        System.out.println("\n[AI 解析中...] プロンプト: " + text);
-        StringBuilder response = new StringBuilder();
-        ProcessBuilder pb = new ProcessBuilder("ollama", "run", "yutayuma-ai", text);
-        pb.redirectErrorStream(true);
+            System.out.println("\n[AI 解析中...] プロンプト: " + text);
+            StringBuilder response = new StringBuilder();
+            ProcessBuilder pb = new ProcessBuilder("ollama", "run", "yutayuma-ai", text);
+            pb.redirectErrorStream(true);
 
-        try {
-            Process process = pb.start();
+            try {
+                Process process = pb.start();
 
-            // 1. 入力ストリームを即座に閉じて、Ollamaに「入力終了」を伝える
-            process.getOutputStream().close();
+                // 1. 入力ストリームを即座に閉じて、Ollamaに「入力終了」を伝える
+                process.getOutputStream().close();
 
-            // 2. 文字コードを UTF-8 に明示して読み込む
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-                            String line;
-                            System.out.println("--- AIの回答 ---");
-                            while ((line = reader.readLine()) != null) {
-                                System.out.println(line);
-                                response.append(line).append(" ");
-                            }
-                            System.out.println("----------------");
+                // 2. 文字コードを UTF-8 に明示して読み込む
+                try (BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+                    String line;
+                    System.out.println("--- AIの回答 ---");
+                    while ((line = reader.readLine()) != null) {
+                        System.out.println(line);
+                        response.append(line).append(" ");
                     }
+                    System.out.println("----------------");
+                }
 
-                    int exitCode = process.waitFor();
-                    if (exitCode != 0) {
-                        System.err.println("Ollamaが異常終了しました (Exit Code: " + exitCode + ")");
-                    }
+                int exitCode = process.waitFor();
+                if (exitCode != 0) {
+                    System.err.println("Ollamaが異常終了しました (Exit Code: " + exitCode + ")");
+                }
 
             } catch (Exception e) {
-            System.err.println("Ollama実行エラー: " + e.getMessage());
-            e.printStackTrace();
+                System.err.println("Ollama実行エラー: " + e.getMessage());
+                e.printStackTrace();
             }
             return response.toString();
         }
 
-
         private void checkAndAlert(String aiResponse) {
-            String lowerResponse = aiResponse.toLowerCase();
-            // 詐欺を疑うキーワードが含まれているかチェック
-            if (lowerResponse.contains("DANGER")) {
-
+            // 詐欺を疑うキーワードが含まれているかチェック（"danger"を小文字でチェック）
+            String cleanedLetters = aiResponse.replaceAll("[^a-zA-Z]", "").toLowerCase();
+            if (cleanedLetters.contains("danger")) {
                 System.out.println("⚠️ 詐欺を検出！LEDを点灯します。");
                 triggerLed();
             } else {
