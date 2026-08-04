@@ -1,5 +1,5 @@
 # フィッシング詐欺撲滅隊メール支所
-今後アプリはリリース予定
+[Releases](https://github.com/m26155/fbm/releases)にAndroid側のアプリを載せています。
 ## Imformation
 通知を読み取ってラズベリーパイに送信、AIで判定し、通知するアプリ。
 ## User Guide
