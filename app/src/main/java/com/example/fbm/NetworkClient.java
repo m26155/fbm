@@ -31,6 +31,7 @@ public class NetworkClient {
     }
 
     public static void sendNotification(String url, String packageName, String title, String text, NetworkCallback callback) {
+        Log.d(TAG, "Attempting to send notification to: " + url);
         if (url == null || url.isEmpty()) {
             Log.e(TAG, "URL is empty, skipping network request");
             return;

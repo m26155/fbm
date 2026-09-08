@@ -24,10 +24,11 @@ public class MyNotificationListenerService extends NotificationListenerService {
     @Override
     public void onNotificationPosted(StatusBarNotification sbn) {
         String packageName = sbn.getPackageName();
+        Log.d(TAG, "Notification received from: " + packageName);
 
         // Filter notifications to only process Gmail and Line
         if (!"com.google.android.gm".equals(packageName) && !"jp.naver.line.android".equals(packageName)) {
-            Log.d(TAG, "Notification Ignored: Package=" + packageName);
+            Log.d(TAG, "Notification Ignored (Not Gmail/Line): Package=" + packageName);
             return;
         }
 
