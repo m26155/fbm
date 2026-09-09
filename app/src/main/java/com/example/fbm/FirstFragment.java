@@ -41,8 +41,8 @@ public class FirstFragment extends Fragment {
         binding.edittextRpiPort.setText(savedPort);
 
         binding.buttonSaveConfig.setOnClickListener(v -> {
-            String ip = binding.edittextRpiIp.getText().toString();
-            String port = binding.edittextRpiPort.getText().toString();
+            String ip = binding.edittextRpiIp.getText().toString().trim();
+            String port = binding.edittextRpiPort.getText().toString().trim();
             prefs.edit()
                     .putString(KEY_RPI_IP, ip)
                     .putString(KEY_RPI_PORT, port)
