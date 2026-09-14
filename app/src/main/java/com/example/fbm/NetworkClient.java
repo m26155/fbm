@@ -19,9 +19,10 @@ import java.util.concurrent.TimeUnit;
 public class NetworkClient {
     private static final String TAG = "NetworkClient";
     private static final OkHttpClient client = new OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(10, TimeUnit.SECONDS)
-            .writeTimeout(10, TimeUnit.SECONDS)
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
+            .writeTimeout(15, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
             .build();
     public static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
 
@@ -49,10 +50,14 @@ public class NetworkClient {
                 .post(body)
                 .build();
 
+        Log.d(TAG, "Enqueuing request to " + url);
         client.newCall(request).enqueue(new Callback() {
             @Override
             public void onFailure(@NonNull Call call, @NonNull IOException e) {
-                Log.e(TAG, "Failed to send notification to " + url, e);
+                Log.e(TAG, "Failed to send notification to " + url + " after " + client.connectTimeoutMillis() + "ms", e);
+                if (e.getMessage() != null && e.getMessage().contains("ETIMEDOUT")) {
+                    Log.e(TAG, "Hint: This is a connection timeout. Check if the device and RPi are on the same Wi-Fi.");
+                }
                 if (callback != null) callback.onFailure(e);
             }
 

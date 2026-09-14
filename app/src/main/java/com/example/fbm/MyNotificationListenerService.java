@@ -13,6 +13,9 @@ import androidx.core.app.NotificationManagerCompat;
 import android.Manifest;
 import android.content.pm.PackageManager;
 import androidx.core.content.ContextCompat;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
 
 public class MyNotificationListenerService extends NotificationListenerService {
 
@@ -73,10 +76,11 @@ public class MyNotificationListenerService extends NotificationListenerService {
 
         // Send to RPi
         SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-        String rpiIp = prefs.getString(KEY_RPI_IP, "");
-        String rpiPort = prefs.getString(KEY_RPI_PORT, "5000");
+        String rpiIp = prefs.getString(KEY_RPI_IP, "").trim();
+        String rpiPort = prefs.getString(KEY_RPI_PORT, "5000").trim();
 
         if (!rpiIp.isEmpty()) {
+            checkNetworkStatus();
             String rpiUrl = "http://" + rpiIp + ":" + rpiPort + "/notify";
             String finalTitle = title;
             String finalText = text;
@@ -118,6 +122,24 @@ public class MyNotificationListenerService extends NotificationListenerService {
             notificationManager.notify((int) System.currentTimeMillis(), builder.build());
         } else {
             Log.w(TAG, "Notification permission not granted, cannot show scam alert");
+        }
+    }
+
+    private void checkNetworkStatus() {
+        ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        if (cm != null) {
+            Network activeNetwork = cm.getActiveNetwork();
+            if (activeNetwork != null) {
+                NetworkCapabilities capabilities = cm.getNetworkCapabilities(activeNetwork);
+                if (capabilities != null) {
+                    boolean isWiFi = capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI);
+                    boolean isCellular = capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR);
+                    boolean hasInternet = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET);
+                    Log.d(TAG, "Network Status: WiFi=" + isWiFi + ", Cellular=" + isCellular + ", InternetCap=" + hasInternet);
+                }
+            } else {
+                Log.w(TAG, "No active network detected.");
+            }
         }
     }
 
