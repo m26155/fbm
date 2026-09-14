@@ -95,6 +95,10 @@ public class MyNotificationListenerService extends NotificationListenerService {
                 @Override
                 public void onFailure(Exception e) {
                     Log.e(TAG, "Network request failed", e);
+                    Intent intent = new Intent("com.example.fbm.NOTIFICATION_LISTENER_EXAMPLE");
+                    String errorMsg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+                    intent.putExtra("notification_event", "Error: " + errorMsg);
+                    sendBroadcast(intent);
                 }
             });
         } else {

@@ -51,7 +51,15 @@ public class MainActivity extends AppCompatActivity {
         public void onReceive(Context context, Intent intent) {
             String temp = intent.getStringExtra("notification_event");
             if (temp != null) {
-                Snackbar.make(binding.getRoot(), temp, Snackbar.LENGTH_LONG).show();
+                if (temp.startsWith("Error:")) {
+                    Snackbar.make(binding.getRoot(), temp, Snackbar.LENGTH_INDEFINITE)
+                            .setAction("Retry", v -> {
+                                // Potentially add retry logic here if needed, but for now just dismiss
+                            })
+                            .show();
+                } else {
+                    Snackbar.make(binding.getRoot(), temp, Snackbar.LENGTH_LONG).show();
+                }
             }
         }
     }
