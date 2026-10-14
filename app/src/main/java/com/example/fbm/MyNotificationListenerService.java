@@ -87,9 +87,7 @@ public class MyNotificationListenerService extends NotificationListenerService {
             NetworkClient.sendNotification(rpiUrl, packageName, title, text, new NetworkClient.NetworkCallback() {
                 @Override
                 public void onSuccess(String response) {
-                    if (response != null && response.contains("\"status\":\"danger\"")) {
-                        showScamAlert(finalTitle, finalText);
-                    }
+                    Log.d(TAG, "Successfully sent notification to RPi. Response: " + response);
                 }
 
                 @Override
