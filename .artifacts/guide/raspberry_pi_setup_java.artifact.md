@@ -1,6 +1,6 @@
 # Raspberry Pi サーバー設定ガイド (AI判定 + Android通知連携版)
 
-このガイドでは、Javaを使用して通知を受け取り、AI（Ollama）で詐欺判定を行い、**ラズパイに光や音で警告させる**手順を説明します。
+このガイドでは、Javaを使用して通知を受け取り、AI（Ollama）で詐欺判定を行い、その結果を返し、**ラズパイに光や音で警告させ、Androidスマホに警告通知を表示させる**手順を説明します。
 
 ## 1. 準備するもの
 
@@ -17,7 +17,7 @@
 
 ## 3. プログラムの作成 (NotificationServer.java)
 
-通信を瞬時に完了させタイムアウトを防ぐため、スマホからの通知を受け取ったラズパイ側は**即座に応答を返し（一瞬で通信終了）**、AI（Ollama）の重い解析処理やLED・音声制御は**バックグラウンドスレッドで非同期実行**します。これにより、タイムアウト時間を変更することなく通信失敗を防ぎます。
+このバージョンでは、AIの解析が終わるまでレスポンスを待機し、結果（`danger` または `safe`）を返します。
 
 ```java
 import com.sun.net.httpserver.HttpExchange;
@@ -67,24 +67,24 @@ public class NotificationServer {
                 System.out.println("Title: " + title);
                 System.out.println("Text: " + message);
 
-                // 通信を瞬時に完了させるため、即座に応答を返し、AI解析・警告処理は別スレッドで非同期実行
-                String response = "{\"status\":\"ok\"}";
-                exchange.getResponseHeaders().set("Content-Type", "application/json");
-                exchange.sendResponseHeaders(200, response.getBytes(StandardCharsets.UTF_8).length);
-                try (OutputStream os = exchange.getResponseBody()) {
-                    os.write(response.getBytes(StandardCharsets.UTF_8));
+                String resultStatus = "safe";
+                if (!message.equals("Unknown")) {
+                    // AI解析を実行（結果が出るまで待機）
+                    String aiResponse = runOllama(message);
+                    if (checkDanger(aiResponse)) {
+                        resultStatus = "danger";
+                        System.out.println("⚠️ 詐欺を検出！");
+                        triggerLed();
+                        playAudio("danger.mp3");
+                    }
                 }
 
-                // バックグラウンドでAI解析とハードウェア制御を実行
-                if (!message.equals("Unknown")) {
-                    new Thread(() -> {
-                        String aiResponse = runOllama(message);
-                        if (checkDanger(aiResponse)) {
-                            System.out.println("⚠️ 詐欺を検出！");
-                            triggerLed();
-                            playAudio("danger.mp3");
-                        }
-                    }).start();
+                // スマホに判定結果を返す
+                String response = "{\"status\":\"" + resultStatus + "\"}";
+                exchange.getResponseHeaders().set("Content-Type", "application/json");
+                exchange.sendResponseHeaders(200, response.length());
+                try (OutputStream os = exchange.getResponseBody()) {
+                    os.write(response.getBytes());
                 }
             } else {
                 exchange.sendResponseHeaders(405, -1);
@@ -143,8 +143,8 @@ public class NotificationServer {
             new Thread(() -> {
                 try {
                     runCommand("mpg123", "-q", filepath);
-                } catch (Exception e) {
-                    System.err.println("音声再生エラー: " + e.getMessage());
+                } catch (Exeption e) {
+                    System.err.printIn("音声再生エラー" + e.getMassage());
                 }
             }).start();
         }
@@ -164,7 +164,7 @@ public class NotificationServer {
 
 1. ラズパイ上で `NotificationServer.java` をコンパイル・実行します。
 2. Androidアプリを起動し、通知権限を許可します。
-3. 通知を受信すると、スマホとの通信が一瞬で完了し、ラズパイ側でバックグラウンドにてAI解析が行われ、危険な場合に光や音で警告します。
+3. 詐欺の疑いがあるメッセージを受信すると、ラズパイが光や音で警告し、スマホ側に警告通知が表示されます。
 
-> [!NOTE]
-> 通信自体は一瞬で完了するため、タイムアウト時間を延長する必要はありません。
+> [!CAUTION]
+> AIの解析には時間がかかるため、元の通知が届いてから警告が出るまで1〜3分程度のタイムラグが発生します。
