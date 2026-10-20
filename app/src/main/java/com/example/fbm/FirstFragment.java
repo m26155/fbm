@@ -49,6 +49,36 @@ public class FirstFragment extends Fragment {
                     .apply();
             Toast.makeText(requireContext(), R.string.config_saved, Toast.LENGTH_SHORT).show();
         });
+
+        binding.buttonTestSend.setOnClickListener(v -> {
+            String ip = binding.edittextRpiIp.getText().toString().trim();
+            String port = binding.edittextRpiPort.getText().toString().trim();
+            if (ip.isEmpty()) {
+                Toast.makeText(requireContext(), "IPアドレスを入力してください", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            String url = "http://" + ip + ":" + (port.isEmpty() ? "5000" : port) + "/notify";
+            Toast.makeText(requireContext(), "ラズパイへテスト送信中...", Toast.LENGTH_SHORT).show();
+            NetworkClient.sendNotification(url, "com.google.android.gm", "テスト通知タイトル", "これはラズパイとの通信テストメッセージです", new NetworkClient.NetworkCallback() {
+                @Override
+                public void onSuccess(String response) {
+                    if (isAdded()) {
+                        requireActivity().runOnUiThread(() -> 
+                            Toast.makeText(requireContext(), "送信成功！レスポンス: " + response, Toast.LENGTH_LONG).show()
+                        );
+                    }
+                }
+
+                @Override
+                public void onFailure(Exception e) {
+                    if (isAdded()) {
+                        requireActivity().runOnUiThread(() -> 
+                            Toast.makeText(requireContext(), "送信失敗: " + e.getMessage(), Toast.LENGTH_LONG).show()
+                        );
+                    }
+                }
+            });
+        });
     }
 
     @Override

@@ -7,6 +7,7 @@
     <string name="rpi_ip_hint">Raspberry Pi IP Address (e.g., 192.168.1.10)</string>
     <string name="rpi_port_hint">Port (e.g., 5000)</string>
     <string name="button_save">Save Configuration</string>
+    <string name="button_test_send">Test Send to RPi</string>
     <string name="config_saved">Configuration saved</string>
 
     <string name="lorem_ipsum">

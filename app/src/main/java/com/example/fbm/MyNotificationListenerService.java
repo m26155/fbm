@@ -38,38 +38,84 @@ public class MyNotificationListenerService extends NotificationListenerService {
         Bundle extras = sbn.getNotification().extras;
         CharSequence titleCharSeq = extras.getCharSequence(Notification.EXTRA_TITLE);
         CharSequence textCharSeq = extras.getCharSequence(Notification.EXTRA_TEXT);
-        
-        if (textCharSeq == null) {
-            textCharSeq = extras.getCharSequence(Notification.EXTRA_BIG_TEXT);
-        }
-
-        if (textCharSeq == null) {
-            textCharSeq = extras.getCharSequence(Notification.EXTRA_SUMMARY_TEXT);
-        }
-
-        if (textCharSeq == null) {
-            CharSequence[] textLines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES);
-            if (textLines != null && textLines.length > 0) {
-                textCharSeq = textLines[textLines.length - 1];
-            }
-        }
+        CharSequence bigTextCharSeq = extras.getCharSequence(Notification.EXTRA_BIG_TEXT);
+        CharSequence summaryTextCharSeq = extras.getCharSequence(Notification.EXTRA_SUMMARY_TEXT);
+        CharSequence[] textLines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES);
 
         String title = titleCharSeq != null ? titleCharSeq.toString() : "No Title";
-        String text = textCharSeq != null ? textCharSeq.toString() : "null";
+        String mainText = textCharSeq != null ? textCharSeq.toString() : "";
+        String bigText = bigTextCharSeq != null ? bigTextCharSeq.toString() : "";
 
-        // Fallback for MessagingStyle
-        if ("null".equals(text)) {
-            // Check if there are messages in extras (Notification.EXTRA_MESSAGES is android.messages)
-            // This is available from API 24+
-            Object[] messages = (Object[]) extras.get(Notification.EXTRA_MESSAGES);
-            if (messages != null && messages.length > 0) {
-                // The last message is usually the most recent one
-                Bundle lastMessage = (Bundle) messages[messages.length - 1];
-                CharSequence messageText = lastMessage.getCharSequence("text");
-                if (messageText != null) {
-                    text = messageText.toString();
+        // Collect lines if present (InboxStyle)
+        String linesText = "";
+        if (textLines != null && textLines.length > 0) {
+            StringBuilder sb = new StringBuilder();
+            for (CharSequence line : textLines) {
+                if (line != null && line.length() > 0) {
+                    if (sb.length() > 0) {
+                        sb.append("\n");
+                    }
+                    sb.append(line);
                 }
             }
+            linesText = sb.toString();
+        }
+
+        // Collect messages if present (MessagingStyle)
+        String messagesText = "";
+        Object[] messages = (Object[]) extras.get(Notification.EXTRA_MESSAGES);
+        if (messages != null && messages.length > 0) {
+            StringBuilder sb = new StringBuilder();
+            for (Object msgObj : messages) {
+                if (msgObj instanceof Bundle) {
+                    Bundle msgBundle = (Bundle) msgObj;
+                    CharSequence msgText = msgBundle.getCharSequence("text");
+                    CharSequence msgSender = msgBundle.getCharSequence("sender");
+                    if (msgText != null && msgText.length() > 0) {
+                        if (sb.length() > 0) {
+                            sb.append("\n");
+                        }
+                        if (msgSender != null && msgSender.length() > 0) {
+                            sb.append(msgSender).append(": ");
+                        }
+                        sb.append(msgText);
+                    }
+                }
+            }
+            messagesText = sb.toString();
+        }
+
+        String text = "";
+
+        // Combine subject and body/bigText/lines
+        if (!bigText.isEmpty()) {
+            if (mainText.isEmpty()) {
+                text = bigText;
+            } else if (bigText.equalsIgnoreCase(mainText)) {
+                text = bigText;
+            } else if (bigText.startsWith(mainText)) {
+                text = bigText;
+            } else {
+                text = "件名: " + mainText + "\n本文: " + bigText;
+            }
+        } else if (!linesText.isEmpty()) {
+            if (!mainText.isEmpty() && !linesText.contains(mainText)) {
+                text = "件名: " + mainText + "\n" + linesText;
+            } else {
+                text = linesText;
+            }
+        } else if (!messagesText.isEmpty()) {
+            if (!mainText.isEmpty() && !messagesText.contains(mainText)) {
+                text = mainText + "\n" + messagesText;
+            } else {
+                text = messagesText;
+            }
+        } else if (!mainText.isEmpty()) {
+            text = mainText;
+        } else if (summaryTextCharSeq != null && summaryTextCharSeq.length() > 0) {
+            text = summaryTextCharSeq.toString();
+        } else {
+            text = "null";
         }
 
         Log.d(TAG, "Notification Posted: Package=" + packageName + ", Title=" + title + ", Text=" + text);
@@ -82,8 +128,6 @@ public class MyNotificationListenerService extends NotificationListenerService {
         if (!rpiIp.isEmpty()) {
             checkNetworkStatus();
             String rpiUrl = "http://" + rpiIp + ":" + rpiPort + "/notify";
-            String finalTitle = title;
-            String finalText = text;
             NetworkClient.sendNotification(rpiUrl, packageName, title, text, new NetworkClient.NetworkCallback() {
                 @Override
                 public void onSuccess(String response) {
