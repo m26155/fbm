@@ -1,10 +1,10 @@
-# Raspberry Pi サーバー設定ガイド (AI判定 + Android通知連携版)
+# Raspberry Pi 5 サーバー設定ガイド (AI判定 + Android通知連携版)
 
-このガイドでは、Javaを使用して通知を受け取り、AI（Ollama）で詐欺判定を行い、**ラズパイに光や音で警告させる**手順を説明します。
+このガイドでは、Javaを使用して通知を受け取り、AI（Ollama）で詐欺判定を行い、**ラズパイ5に光や音で警告させる**手順を説明します。
 
 ## 1. 準備するもの
 
-- Raspberry Pi (Java JDKインストール済み)
+- Raspberry Pi 5 (Java JDKインストール済み)
 - Ollama (yutayuma-ai モデルが準備済みであること)
 - **LED** (1個) & **抵抗** (220Ω程度) ※物理的な警告用
 - 警告音声(ここではdanger.mp3という名前にする)
@@ -17,7 +17,7 @@
 
 ## 3. プログラムの作成 (NotificationServer.java)
 
-通信を瞬時に完了させタイムアウトを防ぐため、スマホからの通知を受け取ったラズパイ側は**即座に応答を返し（一瞬で通信終了）**、AI（Ollama）の重い解析処理やLED・音声制御は**バックグラウンドスレッドで非同期実行**します。これにより、タイムアウト時間を変更することなく通信失敗を防ぎます。
+ラズパイ5（Raspberry Pi OS Bookworm）で確実にあらゆるIPv4ネットワークインターフェースからアクセスを受け付けるよう、`InetSocketAddress("0.0.0.0", port)` で明示的にバインドします。また、通信を瞬時に完了させるため、スマホからの通知を受け取ったラズパイ側は**即座に `{"status":"ok"}` の応答を返し（一瞬で通信終了）**、AI（Ollama）の解析処理やLED・音声制御は**バックグラウンドスレッドで非同期実行**します。
 
 ```java
 import com.sun.net.httpserver.HttpExchange;
@@ -39,13 +39,14 @@ public class NotificationServer {
 
     public static void main(String[] args) throws IOException {
         int port = 5000;
-        HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
+        // 0.0.0.0を指定してIPv4で全インターフェースに明示的にバインド
+        HttpServer server = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);
         server.createContext("/notify", new NotificationHandler());
         server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool());
 
         runCommand("pinctrl", String.valueOf(LED_PIN), "op", "dl");
 
-        System.out.println("Java Server started on port " + port);
+        System.out.println("Java Server started on port " + port + " (0.0.0.0)");
         System.out.println("Waiting for notifications and analyzing with AI...");
         server.start();
     }
@@ -162,9 +163,9 @@ public class NotificationServer {
 
 ## 4. 実行手順
 
-1. ラズパイ上で `NotificationServer.java` をコンパイル・実行します。
-2. Androidアプリを起動し、通知権限を許可します。
-3. 通知を受信すると、スマホとの通信が一瞬で完了し、ラズパイ側でバックグラウンドにてAI解析が行われ、危険な場合に光や音で警告します。
-
-> [!NOTE]
-> 通信自体は一瞬で完了するため、タイムアウト時間を延長する必要はありません。
+1. ラズパイ5上で `NotificationServer.java` を更新・再コンパイルし実行します。
+   ```bash
+   javac NotificationServer.java
+   java NotificationServer
+   ```
+2. Androidアプリ側の設定画面で「Test Send to RPi」を押し、通信が成功するか確認します。
