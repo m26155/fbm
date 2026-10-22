@@ -163,10 +163,11 @@ public class NotificationServer {
 
 ## 4. 実行手順
 
-1. '''
-   sudo apt install ufw
-   sudo ufw allow 5000/tcp
-   '''
+1. ファイアウォールでポートを開放
+'''bash
+sudo apt install ufw
+sudo ufw allow 5000/tcp
+'''
 
 2. ラズパイ5上で `NotificationServer.java` を更新・再コンパイルし実行します。
    ```bash
