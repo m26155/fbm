@@ -47,6 +47,7 @@ public class NetworkClient {
         RequestBody body = RequestBody.create(json, JSON);
         Request request = new Request.Builder()
                 .url(url)
+                .header("Connection", "close")
                 .post(body)
                 .build();
 

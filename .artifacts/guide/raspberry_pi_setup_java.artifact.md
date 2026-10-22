@@ -17,7 +17,7 @@
 
 ## 3. プログラムの作成 (NotificationServer.java)
 
-ラズパイ5（Raspberry Pi OS Bookworm）で確実にあらゆるIPv4ネットワークインターフェースからアクセスを受け付けるよう、`InetSocketAddress("0.0.0.0", port)` で明示的にバインドします。また、通信を瞬時に完了させるため、スマホからの通知を受け取ったラズパイ側は**即座に `{"status":"ok"}` の応答を返し（一瞬で通信終了）**、AI（Ollama）の解析処理やLED・音声制御は**バックグラウンドスレッドで非同期実行**します。
+コネクションプールの再利用による接続エラー（`Failed to connect`）を防ぐため、HTTPレスポンスに `Connection: close` ヘッダーを付与し、毎回フレッシュなTCPコネクションを確立するように設計しています。また、AI解析（Ollama）はシングルスレッドのキュー（順次実行）で処理し、ラズパイ5の過負荷を防ぎます。
 
 ```java
 import com.sun.net.httpserver.HttpExchange;
@@ -31,18 +31,22 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.Scanner;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class NotificationServer {
     private static final int LED_PIN = 18;
+    // Ollamaの同時実行によるラズパイ5の過負荷を防ぐため、AI処理専用の単一スレッドキュー
+    private static final ExecutorService aiExecutor = Executors.newSingleThreadExecutor();
 
     public static void main(String[] args) throws IOException {
         int port = 5000;
         // 0.0.0.0を指定してIPv4で全インターフェースに明示的にバインド
         HttpServer server = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);
         server.createContext("/notify", new NotificationHandler());
-        server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool());
+        server.setExecutor(Executors.newCachedThreadPool());
 
         runCommand("pinctrl", String.valueOf(LED_PIN), "op", "dl");
 
@@ -68,27 +72,30 @@ public class NotificationServer {
                 System.out.println("Title: " + title);
                 System.out.println("Text: " + message);
 
-                // 通信を瞬時に完了させるため、即座に応答を返し、AI解析・警告処理は別スレッドで非同期実行
+                // 即座に応答を返し、Connection: closeを設定して接続の再利用バグを防ぐ
                 String response = "{\"status\":\"ok\"}";
                 exchange.getResponseHeaders().set("Content-Type", "application/json");
+                exchange.getResponseHeaders().set("Connection", "close");
                 exchange.sendResponseHeaders(200, response.getBytes(StandardCharsets.UTF_8).length);
                 try (OutputStream os = exchange.getResponseBody()) {
                     os.write(response.getBytes(StandardCharsets.UTF_8));
                 }
+                exchange.close();
 
-                // バックグラウンドでAI解析とハードウェア制御を実行
+                // AI解析はキュー（aiExecutor）に入れて1件ずつ順番に処理
                 if (!message.equals("Unknown")) {
-                    new Thread(() -> {
+                    aiExecutor.submit(() -> {
                         String aiResponse = runOllama(message);
                         if (checkDanger(aiResponse)) {
                             System.out.println("⚠️ 詐欺を検出！");
                             triggerLed();
                             playAudio("danger.mp3");
                         }
-                    }).start();
+                    });
                 }
             } else {
                 exchange.sendResponseHeaders(405, -1);
+                exchange.close();
             }
         }
 
@@ -124,7 +131,6 @@ public class NotificationServer {
         }
 
         private boolean checkDanger(String aiResponse) {
-            // AIの回答に "danger" が含まれているかチェック
             return aiResponse.replaceAll("[^a-zA-Z]", "").toLowerCase().contains("danger");
         }
 
