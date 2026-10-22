@@ -17,7 +17,7 @@
 
 ## 3. プログラムの作成 (NotificationServer.java)
 
-ラズパイ5のCPU/メモリ資源を守り、複数通知によるフリーズや通信途絶を防ぐため、**AI解析（Ollama）はシングルスレッドのキュー（順次実行）**で処理します。また、スマホからの通信は即座に `{"status":"ok"}` を返して一瞬で完了させます。
+ラズパイ5（Raspberry Pi OS Bookworm）で確実にあらゆるIPv4ネットワークインターフェースからアクセスを受け付けるよう、`InetSocketAddress("0.0.0.0", port)` で明示的にバインドします。また、通信を瞬時に完了させるため、スマホからの通知を受け取ったラズパイ側は**即座に `{"status":"ok"}` の応答を返し（一瞬で通信終了）**、AI（Ollama）の解析処理やLED・音声制御は**バックグラウンドスレッドで非同期実行**します。
 
 ```java
 import com.sun.net.httpserver.HttpExchange;
@@ -31,22 +31,18 @@ import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.util.Scanner;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class NotificationServer {
     private static final int LED_PIN = 18;
-    // Ollamaの同時実行によるラズパイ5の過負荷（フリーズ）を防ぐため、AI処理専用の単一スレッドキューを用意
-    private static final ExecutorService aiExecutor = Executors.newSingleThreadExecutor();
 
     public static void main(String[] args) throws IOException {
         int port = 5000;
         // 0.0.0.0を指定してIPv4で全インターフェースに明示的にバインド
         HttpServer server = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);
         server.createContext("/notify", new NotificationHandler());
-        server.setExecutor(Executors.newCachedThreadPool());
+        server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool());
 
         runCommand("pinctrl", String.valueOf(LED_PIN), "op", "dl");
 
@@ -72,7 +68,7 @@ public class NotificationServer {
                 System.out.println("Title: " + title);
                 System.out.println("Text: " + message);
 
-                // 通信を瞬時に完了させるため、即座に応答を返す
+                // 通信を瞬時に完了させるため、即座に応答を返し、AI解析・警告処理は別スレッドで非同期実行
                 String response = "{\"status\":\"ok\"}";
                 exchange.getResponseHeaders().set("Content-Type", "application/json");
                 exchange.sendResponseHeaders(200, response.getBytes(StandardCharsets.UTF_8).length);
@@ -80,16 +76,16 @@ public class NotificationServer {
                     os.write(response.getBytes(StandardCharsets.UTF_8));
                 }
 
-                // AI解析はキュー（aiExecutor）に入れて順番に処理する
+                // バックグラウンドでAI解析とハードウェア制御を実行
                 if (!message.equals("Unknown")) {
-                    aiExecutor.submit(() -> {
+                    new Thread(() -> {
                         String aiResponse = runOllama(message);
                         if (checkDanger(aiResponse)) {
                             System.out.println("⚠️ 詐欺を検出！");
                             triggerLed();
                             playAudio("danger.mp3");
                         }
-                    });
+                    }).start();
                 }
             } else {
                 exchange.sendResponseHeaders(405, -1);
@@ -128,6 +124,7 @@ public class NotificationServer {
         }
 
         private boolean checkDanger(String aiResponse) {
+            // AIの回答に "danger" が含まれているかチェック
             return aiResponse.replaceAll("[^a-zA-Z]", "").toLowerCase().contains("danger");
         }
 
@@ -163,3 +160,12 @@ public class NotificationServer {
     }
 }
 ```
+
+## 4. 実行手順
+
+1. ラズパイ5上で `NotificationServer.java` を更新・再コンパイルし実行します。
+   ```bash
+   javac NotificationServer.java
+   java NotificationServer
+   ```
+2. Androidアプリ側の設定画面で「Test Send to RPi」を押し、通信が成功するか確認します。
