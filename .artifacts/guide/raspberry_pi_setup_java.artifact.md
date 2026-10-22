@@ -163,9 +163,14 @@ public class NotificationServer {
 
 ## 4. 実行手順
 
-1. ラズパイ5上で `NotificationServer.java` を更新・再コンパイルし実行します。
+1. '''
+   sudo apt install ufw
+   sudo ufw allow 5000/tcp
+   '''
+
+2. ラズパイ5上で `NotificationServer.java` を更新・再コンパイルし実行します。
    ```bash
    javac NotificationServer.java
    java NotificationServer
    ```
-2. Androidアプリ側の設定画面で「Test Send to RPi」を押し、通信が成功するか確認します。
+3. Androidアプリ側の設定画面で「Test Send to RPi」を押し、通信が成功するか確認します。
