@@ -7,6 +7,7 @@
 - Raspberry Pi 5 (Java JDKインストール済み)
 - Ollama (yutayuma-ai モデルが準備済みであること)
 - **LED** (1個) & **抵抗** (220Ω程度) ※物理的な警告用
+- IP.txtにIPアドレスを書く
 - 警告音声(ここではdanger.mp3という名前にする)
 - スピーカー
 
@@ -30,6 +31,9 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Scanner;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -43,14 +47,15 @@ public class NotificationServer {
 
     public static void main(String[] args) throws IOException {
         int port = 5000;
-        // 0.0.0.0を指定してIPv4で全インターフェースに明示的にバインド
-        HttpServer server = HttpServer.create(new InetSocketAddress("0.0.0.0", port), 0);
+        Path file = Paths.get("IP.txt");
+        String ip = Files.readString(file);
+        HttpServer server = HttpServer.create(new InetSocketAddress(ip, port), 0);
         server.createContext("/notify", new NotificationHandler());
         server.setExecutor(Executors.newCachedThreadPool());
 
         runCommand("pinctrl", String.valueOf(LED_PIN), "op", "dl");
 
-        System.out.println("Java Server started on port " + port + " (0.0.0.0)");
+        System.out.println("Java Server started on port " + ip + ":" + port);
         System.out.println("Waiting for notifications and analyzing with AI...");
         server.start();
     }
