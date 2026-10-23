@@ -80,8 +80,9 @@ public class FirstFragment extends Fragment {
                 public void onFailure(Exception e) {
                     android.util.Log.e("FirstFragment", "Test send failure", e);
                     if (isAdded()) {
+                        String err = e.getClass().getSimpleName() + ": " + e.getMessage();
                         requireActivity().runOnUiThread(() -> 
-                            Toast.makeText(requireContext(), "送信失敗: " + e.getMessage(), Toast.LENGTH_LONG).show()
+                            Toast.makeText(requireContext(), "送信失敗: " + err, Toast.LENGTH_LONG).show()
                         );
                     }
                 }
