@@ -11,7 +11,7 @@ android {
     defaultConfig {
         applicationId = "com.example.fbm"
         minSdk = 30
-        targetSdk = 37
+        targetSdk = 34
         versionCode = 1
         versionName = "alpha1.0"
 
