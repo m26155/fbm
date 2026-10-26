@@ -96,7 +96,7 @@ class NotificationHandler(http.server.BaseHTTPRequestHandler):
                         threading.Thread(target=trigger_led).start()
                         threading.Thread(target=play_audio, args=("danger.mp3",)).start()
 
-                threading.Thread(target=background_tag := background_task).start()
+                threading.Thread(target=background_task).start()
         else:
             self.send_response(404)
             self.end_headers()
