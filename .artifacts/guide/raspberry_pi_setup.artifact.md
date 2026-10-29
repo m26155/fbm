@@ -1,4 +1,4 @@
-# Raspberry Pi 5 サーバー設定ガイド (Python堅牢版・AI判定 + Android通知連携)
+# Raspberry Pi 5 サーバー設定ガイド (Python・AI判定 + Android通知連携)
 
 このガイドでは、Pythonを使用して通知を受け取り、AI（Ollama）で詐欺判定を行い、**ラズパイ5に光や音で警告させる**手順を説明します。万全の例外処理（Try-Catch）を施した堅牢なPythonサーバーを採用することで、通信エラーや予期せぬ切断を完全に防ぎます。
 
