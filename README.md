@@ -21,4 +21,4 @@
 ℹ️デバッグapkはこのリポジトリをフォークしてアクションを実行しても作れます
 
 ### ラズベリーパイ側
-[ラズパイ側説明書](https://github.com/m26155/fbm/blob/master/.artifacts/guide/raspberry_pi_setup_java.artifact.md)
+[ラズパイ側説明書](https://github.com/m26155/fbm/blob/master/.artifacts/guide/raspberry_pi_setup.artifact.md)
