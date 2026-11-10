@@ -82,26 +82,32 @@ class NotificationHandler(http.server.BaseHTTPRequestHandler):
 
                 print(f"\n--- 通知受信 ---\nTitle: {title}\nText: {text}")
 
-                # 即座に応答を返し、通信を瞬時（一瞬）に完了させる
+                # AI解析を実行し、詐欺判定（"danger"）が出た場合はレスポンスでスマホへ通知
+                is_scam = False
+                ai_response = ""
+                if text != "Unknown":
+                    try:
+                        ai_response = run_ollama(text)
+                        if "danger" in ai_response.lower() or "scam" in ai_response.lower():
+                            is_scam = True
+                            print("⚠️ 詐欺を検出！")
+                            threading.Thread(target=trigger_led).start()
+                            threading.Thread(target=play_audio, args=("danger.mp3",)).start()
+                    except Exception as bg_err:
+                        print(f"AI Task Error: {bg_err}")
+
+                response_data = {
+                    "status": "danger" if is_scam else "ok",
+                    "is_scam": is_scam,
+                    "ai_response": ai_response
+                }
+
+                # スマホ側に判定結果を返却
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Connection", "close")
                 self.end_headers()
-                self.wfile.write(b'{"status":"ok"}')
-
-                # AI解析や警告処理はバックグラウンドで安全に非同期実行
-                if text != "Unknown":
-                    def background_task():
-                        try:
-                            ai_response = run_ollama(text)
-                            if "danger" in ai_response.lower():
-                                print("⚠️ 詐欺を検出！")
-                                threading.Thread(target=trigger_led).start()
-                                threading.Thread(target=play_audio, args=("danger.mp3",)).start()
-                        except Exception as bg_err:
-                            print(f"Background task error: {bg_err}")
-
-                    threading.Thread(target=background_task).start()
+                self.wfile.write(json.dumps(response_data).encode('utf-8'))
             else:
                 self.send_response(404)
                 self.end_headers()
