@@ -149,19 +149,78 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
-        // Handle action bar item clicks here. The action bar will
-        // automatically handle clicks on the Home/Up button, so long
-        // as you specify a parent activity in AndroidManifest.xml.
         int id = item.getItemId();
 
-        //noinspection SimplifiableIfStatement
-        if (id == R.id.action_github) {
+        if (id == R.id.action_test_send) {
+            performTestSend();
+            return true;
+        } else if (id == R.id.action_demo_scam_alert) {
+            showDemoScamAlert();
+            return true;
+        } else if (id == R.id.action_github) {
             Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/m26155/fbm"));
             startActivity(browserIntent);
             return true;
         }
 
         return super.onOptionsItemSelected(item);
+    }
+
+    private void performTestSend() {
+        android.content.SharedPreferences prefs = getSharedPreferences("FBM_Prefs", Context.MODE_PRIVATE);
+        String ip = prefs.getString("rpi_ip", "").trim();
+        String port = prefs.getString("rpi_port", "5000").trim();
+
+        if (ip.isEmpty()) {
+            android.widget.Toast.makeText(this, "RPiのIPアドレスが設定されていません", android.widget.Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String url = "http://" + ip + ":" + (port.isEmpty() ? "5000" : port) + "/notify";
+        android.widget.Toast.makeText(this, "ラズパイへテスト送信中...", android.widget.Toast.LENGTH_SHORT).show();
+
+        NetworkClient.sendNotification(url, "com.google.android.gm", "テスト通知タイトル", "これはラズパイとの通信テストメッセージです", new NetworkClient.NetworkCallback() {
+            @Override
+            public void onSuccess(String response) {
+                runOnUiThread(() ->
+                        android.widget.Toast.makeText(MainActivity.this, "送信成功！レスポンス: " + response, android.widget.Toast.LENGTH_LONG).show()
+                );
+            }
+
+            @Override
+            public void onFailure(Exception e) {
+                String err = e.getClass().getSimpleName() + ": " + e.getMessage();
+                runOnUiThread(() ->
+                        android.widget.Toast.makeText(MainActivity.this, "送信失敗: " + err, android.widget.Toast.LENGTH_LONG).show()
+                );
+            }
+        });
+    }
+
+    private void showDemoScamAlert() {
+        Intent openAppIntent = new Intent(this, MainActivity.class);
+        openAppIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        android.app.PendingIntent pendingIntent = android.app.PendingIntent.getActivity(
+                this, (int) System.currentTimeMillis(), openAppIntent,
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT | android.app.PendingIntent.FLAG_IMMUTABLE);
+
+        androidx.core.app.NotificationCompat.Builder builder = new androidx.core.app.NotificationCompat.Builder(this, SCAM_CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.ic_dialog_alert)
+                .setContentTitle("⚠️ 【デモ】フィッシング詐欺の疑い")
+                .setContentText("AIが危険と判定した通知のアラートデモです")
+                .setStyle(new androidx.core.app.NotificationCompat.BigTextStyle()
+                        .bigText("【デモ警告通知】\nAIがフィッシング詐欺の可能性を検出しました。\n\n差出人: security-update@example.com\n件名: 【重要】アカウント凍結のお知らせ\n本文: 本人確認を行ってください。"))
+                .setPriority(androidx.core.app.NotificationCompat.PRIORITY_MAX)
+                .setCategory(androidx.core.app.NotificationCompat.CATEGORY_ALARM)
+                .setContentIntent(pendingIntent)
+                .setAutoCancel(true);
+
+        androidx.core.app.NotificationManagerCompat notificationManager = androidx.core.app.NotificationManagerCompat.from(this);
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+            notificationManager.notify((int) System.currentTimeMillis(), builder.build());
+            android.widget.Toast.makeText(this, "デモ警告通知を発行しました", android.widget.Toast.LENGTH_SHORT).show();
+        } else {
+            android.widget.Toast.makeText(this, "通知権限が許可されていません", android.widget.Toast.LENGTH_SHORT).show();
+        }
     }
 
     @Override

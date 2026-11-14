@@ -49,45 +49,6 @@ public class FirstFragment extends Fragment {
                     .apply();
             Toast.makeText(requireContext(), R.string.config_saved, Toast.LENGTH_SHORT).show();
         });
-
-        binding.buttonTestSend.setOnClickListener(v -> {
-            android.util.Log.d("FirstFragment", "Test Send button clicked");
-            String ip = binding.edittextRpiIp != null && binding.edittextRpiIp.getText() != null 
-                    ? binding.edittextRpiIp.getText().toString().trim() : "";
-            String port = binding.edittextRpiPort != null && binding.edittextRpiPort.getText() != null 
-                    ? binding.edittextRpiPort.getText().toString().trim() : "5000";
-            
-            android.util.Log.d("FirstFragment", "IP: " + ip + ", Port: " + port);
-            if (ip.isEmpty()) {
-                Toast.makeText(requireContext(), "IPアドレスを入力してください", Toast.LENGTH_SHORT).show();
-                return;
-            }
-            String url = "http://" + ip + ":" + (port.isEmpty() ? "5000" : port) + "/notify";
-            Toast.makeText(requireContext(), "ラズパイへテスト送信中...", Toast.LENGTH_SHORT).show();
-            
-            NetworkClient.sendNotification(url, "com.google.android.gm", "テスト通知タイトル", "これはラズパイとの通信テストメッセージです", new NetworkClient.NetworkCallback() {
-                @Override
-                public void onSuccess(String response) {
-                    android.util.Log.d("FirstFragment", "Test send success: " + response);
-                    if (isAdded()) {
-                        requireActivity().runOnUiThread(() -> 
-                            Toast.makeText(requireContext(), "送信成功！レスポンス: " + response, Toast.LENGTH_LONG).show()
-                        );
-                    }
-                }
-
-                @Override
-                public void onFailure(Exception e) {
-                    android.util.Log.e("FirstFragment", "Test send failure", e);
-                    if (isAdded()) {
-                        String err = e.getClass().getSimpleName() + ": " + e.getMessage();
-                        requireActivity().runOnUiThread(() -> 
-                            Toast.makeText(requireContext(), "送信失敗: " + err, Toast.LENGTH_LONG).show()
-                        );
-                    }
-                }
-            });
-        });
     }
 
     @Override

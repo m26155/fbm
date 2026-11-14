@@ -1,6 +1,8 @@
 <resources>
     <string name="app_name">フィッシング詐欺撲滅隊メール支所</string>
     <string name="action_github">GitHub</string>
+    <string name="action_test_send">RPiへテスト送信</string>
+    <string name="action_demo_scam_alert">警告通知デモ</string>
     <string name="welcome_message">フィッシング詐欺撲滅隊メール支所へようこそ！SMSの通知を読み取り、AIでフィッシング詐欺かどうかを判定します。</string>
     <!-- Strings used for fragments for navigation -->
     <string name="welcome_label">Welcome</string>
