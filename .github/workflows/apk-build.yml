@@ -1,4 +1,4 @@
-name: Build Debug APK
+name: Build Debug APK(Android Studioが使えない場合)
 
 on:
   workflow_dispatch:
